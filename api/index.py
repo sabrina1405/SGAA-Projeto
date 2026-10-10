@@ -10,20 +10,19 @@ if str(ROOT_DIR) not in sys.path:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.core.config import obter_config
 from src.main import app as src_app
 
 ENVIRONMENT = os.getenv("VERCEL_ENV", "dev")
 
-app = FastAPI(
-    title="SGAA API",
-    description="Backend do Sistema de Gerenciamento de Alunos e Aulas",
-    version="0.1.0",
-)
+# A documentação (/docs, /redoc) é servida pela aplicação montada em "/", que é onde ficam as rotas; a daqui a esconderia.
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=obter_config().lista_cors_origins,
+    # A autenticação usa token Bearer no header, sem cookies.
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -78,8 +78,18 @@ Abra o arquivo `.env` gerado e configure as variáveis de acordo com o seu ambie
 DATABASE_URL=postgresql+psycopg://user:password@localhost:5432/sgaa_dev
 
 # Configurações da Aplicação
-SECRET_KEY=sua_chave_secreta_muito_segura_aqui
+# Mínimo de 32 caracteres. Gere com:
+#   python -c "import secrets; print(secrets.token_urlsafe(48))"
+SECRET_KEY=troque_por_uma_chave_aleatoria_com_32_ou_mais_caracteres
+
+# Origens permitidas para o front web (separadas por vírgula)
+CORS_ORIGINS=http://localhost:8081
+
+# "console" apenas loga os e-mails; "smtp" envia de verdade (ver .env.example)
+EMAIL_BACKEND=console
 ```
+
+> **Nota:** A API não inicia se `DATABASE_URL` ou `SECRET_KEY` estiverem ausentes ou se a `SECRET_KEY` tiver menos de 32 caracteres.
 
 ---
 
@@ -92,6 +102,11 @@ Com o PostgreSQL rodando localmente e o banco de dados criado:
 1. Aplique as migrações existentes do Alembic para estruturar o banco:
    ```bash
    poetry run alembic upgrade head
+   ```
+
+2. Crie a conta da professora (não existe cadastro público; os alunos são cadastrados por ela):
+   ```bash
+   poetry run python -m src.scripts.criar_professor
    ```
 
 ---
