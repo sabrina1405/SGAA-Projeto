@@ -16,9 +16,11 @@ Criar uma migração a partir dos modelos (use o próximo número da sequência 
 
 Desfazer a última migração: `poetry run alembic downgrade -1`
 
+Aplicar as migrações em produção ou homologação (pede a URL do Session pooler do Supabase, porta 5432, e confirmação): `./aplicar_migracoes.sh`
+
 Guia completo (criar, aplicar, trocar de branch, conflitos): [Migrações com Alembic](docs/banco_de_dados/migracoes_alembic.md)
 
-Criar a conta da professora (pede nome, e-mail e senha): `poetry run python -m src.scripts.criar_professor`
+Criar a conta da professora (pergunta se é no banco local ou em homologação/produção, e depois pede nome, e-mail e senha): `poetry run python -m src.scripts.criar_professor`
 
 ## Testes
 

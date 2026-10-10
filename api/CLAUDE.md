@@ -14,6 +14,18 @@ Comandos executados dentro de `api/`.
    - `poetry run ruff format --check .`
    - `poetry run pytest`
 2. Executar as migrations (`poetry run alembic upgrade head`) antes dos testes e sempre que criar ou alterar uma migração. Ao criar uma, validar também o caminho de volta (`poetry run alembic downgrade -1` e `upgrade head` de novo).
+3. Quando for pedido para organizar os commits, não executar `git commit`. Apenas colocar em staging os arquivos ou trechos de arquivos de cada grupo e sugerir no terminal a mensagem do commit (só o título, ou título com corpo). O commit é feito manualmente, depois de uma breve revisão do que foi separado.
+
+Se o `poetry` não estiver disponível no ambiente (por exemplo, dentro do ai-jail), criar um venv em `api/.venv` (já ignorado pelo git), instalar o `poetry` nele e usar os comandos normalmente:
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+pip install poetry
+poetry install
+```
+
+Se o `.venv` já existir, basta ativá-lo.
 
 Os testes e as migrations precisam de um PostgreSQL acessível pela `DATABASE_URL`. Se não houver um disponível, subir um local com Docker:
 
