@@ -96,7 +96,8 @@ As listagens recebem os parâmetros `pagina` e `tamanho` e devolvem em `dados` o
 
 Rotas `PATCH` alteram só os campos enviados; os demais ficam como estão.
 
-- Corpo vazio e campo enviado como `null` geram `422`.
+- Corpo vazio gera `422`.
+- Campo enviado como `null` gera `422`, exceto nos campos opcionais em que a rota aceita `null` para apagar o valor (hoje, a `descricao` do grupo).
 - Se algum campo for recusado, nada é gravado.
 
 ---
@@ -172,6 +173,28 @@ Campos que o aluno pode editar:
 - **Campos bloqueados**: `email`, `cpf` e `data_nascimento` não são editáveis e geram `422`, como qualquer campo desconhecido.
 - **Troca de responsável**: basta enviar os três campos `responsavel_*` na mesma chamada.
 - **Quem tem responsável**: vale o que foi definido no primeiro acesso (`possui_responsavel`), não a idade atual. Um aluno que completa 18 anos continua editando os dados do responsável e ainda não tem como cadastrar CPF e telefone próprios.
+
+### Grupos (professor)
+
+| Rota | Resultado |
+| --- | --- |
+| `POST /v1/grupos` | Cria o grupo e devolve seus dados com a lista de alunos. |
+| `GET /v1/grupos` | Lista paginada, por título, com `total_alunos` de cada grupo. |
+| `GET /v1/grupos/{id}` | Dados do grupo e seus alunos, em ordem alfabética. |
+| `PATCH /v1/grupos/{id}` | Altera `titulo` e/ou `descricao`. |
+| `DELETE /v1/grupos/{id}` | Exclui o grupo. |
+| `POST /v1/grupos/{id}/alunos` | Adiciona os alunos de `aluno_ids` e devolve o grupo atualizado. |
+| `DELETE /v1/grupos/{id}/alunos/{aluno_id}` | Tira o aluno do grupo. |
+
+- **Criação**: só `titulo` (até 50 caracteres) é obrigatório. `descricao` (até 100) e `aluno_ids` são opcionais; os alunos podem ser adicionados depois.
+- **Dono do grupo**: cada professor vê e altera só os grupos que criou. Grupo de outro professor, inexistente ou excluído responde `404`.
+- **Quem pode entrar**: alunos que concluíram o primeiro acesso, os mesmos da listagem de alunos. Um aluno pode estar em vários grupos.
+- **`aluno_ids`**: até 100 ids por chamada, sem repetição. Se algum não for de um aluno válido, a resposta é `422` com `tipo` igual a `aluno_invalido`, a `mensagem` lista os ids recusados e nada é gravado: nenhum aluno entra e, na criação, o grupo não é criado.
+- **Aluno que já está no grupo**: adicionar de novo é ignorado, sem erro.
+- **Aluno que não está no grupo**: tentar removê-lo responde `404`.
+- **Edição**: `descricao` enviada como `null` apaga a descrição; `titulo` não pode ser `null`.
+- **Exclusão**: o grupo deixa de aparecer na listagem e no detalhe. Os alunos não são afetados.
+- **Títulos repetidos** são permitidos.
 
 ---
 

@@ -11,14 +11,11 @@ from src.schemas.paginacao import (
     Pagina,
 )
 from src.schemas.resposta import Resposta
-from src.schemas.tipos import Busca
+from src.schemas.tipos import ID_MAXIMO, Busca
 from src.schemas.usuario import AlunoCriar, UsuarioResposta
 from src.services import usuario_service
 
 router = APIRouter(prefix="/usuarios", tags=["Usuários"])
-
-# Maior valor de uma coluna integer do PostgreSQL.
-ID_MAXIMO = 2_147_483_647
 
 
 @router.post("/alunos", status_code=status.HTTP_201_CREATED)
