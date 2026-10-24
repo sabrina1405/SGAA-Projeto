@@ -53,8 +53,8 @@ export default function HomeScreen() {
             title="Fresh start"
             hint={<ThemedText type="code">npm run reset-project</ThemedText>}
           />
-        </ThemedView>
         <List_item />
+        </ThemedView>
 
         {Platform.OS === 'web' && <WebBadge />}
 

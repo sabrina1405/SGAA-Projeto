@@ -19,18 +19,21 @@ export default function List_item(){
     
     return(
         <View style={styles.containerList}>
-            <View>{/* Barra Lateral */}</View>
+            <View style={styles.lateralBar}>
 
-            <View>
-                {/* Fundo Icone */}
-                <View>{/* Icone */}</View>
+            </View>
+
+        <View style={styles.containerInfos}>
+            <View style={styles.iconContainer}>
+                <View><Text>ICONE</Text></View>
             </View>
 
             <View>
-                <Text>Título</Text>
-                <Text>Aluno</Text>
-                <Text>Data e Hora</Text>
+                <Text style={styles.mainTitle}>Título</Text>
+                <Text style={styles.infosList}>Aluno</Text>
+                <Text style={styles.infosList}>Data e Hora</Text>
             </View>
+        </View>
 
         </View>
     )
