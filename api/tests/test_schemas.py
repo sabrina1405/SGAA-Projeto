@@ -9,7 +9,7 @@ from src.schemas.aluno import (
     calcular_idade,
 )
 from src.schemas.auth import LoginEntrada, RedefinirSenhaEntrada
-from src.schemas.tipos import ChavePix, Cnpj
+from src.schemas.tipos import ChavePix, Cnpj, ConteudoRecado
 from src.schemas.usuario import AlunoCriar
 from tests.conftest import nascido_ha
 
@@ -263,3 +263,30 @@ def test_chave_pix_de_email_cabe_na_coluna():
     chave = "a" * 65 + "@exemplo.com"
     assert len(chave) == 77
     assert TypeAdapter(ChavePix).validate_python(chave) == chave
+
+
+_CONTEUDO_RECADO = TypeAdapter(ConteudoRecado)
+
+
+@pytest.mark.parametrize(
+    ("valor", "esperado"),
+    [
+        ("  **Aviso**  ", "**Aviso**"),
+        ("linha 1\r\nlinha 2\n\n- item", "linha 1\nlinha 2\n\n- item"),
+        ("coluna\tvalor", "coluna\tvalor"),
+        ("Ac\u0327a\u0303o", "Ação"),
+        # Emoji composto, com ZWJ (formatação invisível).
+        ("👩\u200d🏫 aula", "👩\u200d🏫 aula"),
+        ("a" * 5000, "a" * 5000),
+    ],
+)
+def test_conteudo_do_recado_e_higienizado(valor, esperado):
+    assert _CONTEUDO_RECADO.validate_python(valor) == esperado
+
+
+@pytest.mark.parametrize(
+    "valor", ["", " \n\t ", "a" * 5001, "nulo\x00", "sino\x07", "esc\x1b[0m"]
+)
+def test_conteudo_do_recado_invalido(valor):
+    with pytest.raises(ValidationError):
+        _CONTEUDO_RECADO.validate_python(valor)

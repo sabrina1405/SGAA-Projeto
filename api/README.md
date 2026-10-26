@@ -11,4 +11,4 @@ Confira os guias passo a passo para configurar e rodar a aplicação:
 - 🔭 **[Observabilidade](docs/observabilidade.md)**: O que a API envia ao Logfire, o que fica de fora e como configurar o token.
 - 🛡️ **[Auditoria de Dependências](docs/auditoria_dependencias.md)**: Como usar o `pip-audit` para checar vulnerabilidades conhecidas antes de instalar um pacote e no `requirements.txt`.
 - 🔌 **[Fluxos e Convenções da API](../docs/api/fluxos.md)**: Convenções das rotas, fluxos de login, primeiro acesso e redefinição de senha, e limites dos códigos. A referência de cada rota é o Swagger, em `/docs`.
-
+- 📮 **[Testes no Postman](docs/postman.md)**: Exemplos de requisição e resposta, com caminho feliz e de erro, de cada endpoint com parâmetros ou corpo.

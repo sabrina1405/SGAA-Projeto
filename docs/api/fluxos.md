@@ -196,6 +196,45 @@ Campos que o aluno pode editar:
 - **Exclusão**: o grupo deixa de aparecer na listagem e no detalhe. Os alunos não são afetados.
 - **Títulos repetidos** são permitidos.
 
+### Recados (professor)
+
+| Rota | Resultado |
+| --- | --- |
+| `GET /v1/recados/geral` | Recado geral do professor. `dados` vem `null` quando o painel está vazio. |
+| `PUT /v1/recados/geral` | Cria ou substitui o recado geral com o `conteudo` enviado. |
+| `DELETE /v1/recados/geral` | Limpa o painel. |
+| `POST /v1/recados` | Cria o recado e devolve seus dados, com os alunos e grupos destinatários. |
+| `GET /v1/recados` | Histórico paginado, do mais novo ao mais antigo, com `total_alunos` e `total_grupos` de cada recado. |
+| `GET /v1/recados/{id}` | Dados do recado e seus destinatários. |
+| `PATCH /v1/recados/{id}` | Altera só os campos enviados. |
+| `DELETE /v1/recados/{id}` | Exclui o recado. |
+
+- **Recado geral**: um por professor, sempre visível a todos os alunos. Limpar o painel já vazio não é erro.
+- **Conteúdo**: texto em Markdown, de 1 a 5000 caracteres. O front faz a renderização. Espaços nas pontas são removidos e as quebras de linha são mantidas. Caracteres de controle, exceto quebra de linha e tabulação, geram `422`.
+- **Período**: `data_inicio` (padrão: hoje, no horário de Brasília) e `data_fim` (opcional) no formato `AAAA-MM-DD`. Sem `data_fim`, o recado fica no mural até ser excluído. `data_fim` anterior a `data_inicio` gera `422` com `tipo` igual a `periodo_invalido`.
+- **Destinatários**: `aluno_ids` e `grupo_ids` (até 100 ids cada, sem repetição) e os indicadores `todos_alunos` e `todos_grupos`. Os dois indicadores valem também para quem entrar depois do envio.
+  - É preciso informar ao menos um destinatário. Do contrário, a resposta é `422` com `tipo` igual a `sem_destinatario`.
+  - `todos_alunos` junto com `aluno_ids`, ou `todos_grupos` junto com `grupo_ids`, gera `422` com `tipo` igual a `destinatarios_conflitantes`.
+  - Aluno que não concluiu o primeiro acesso gera `422` com `tipo` igual a `aluno_invalido`. Grupo de outro professor, inexistente ou excluído gera `422` com `tipo` igual a `grupo_invalido`. Em ambos os casos, nada é gravado.
+- **Edição**: `data_fim` enviada como `null` tira a data de fim. Os outros campos não podem ser `null`. `aluno_ids` e `grupo_ids`, quando enviados, substituem os destinatários atuais. O período e os destinatários são conferidos com o recado completo, somando o que já está salvo ao que foi enviado.
+- **Dono do recado**: cada professor vê e altera só os próprios recados. Recado de outro professor, inexistente ou excluído responde `404`.
+- **Exclusão**: o recado sai do histórico e do mural.
+
+### Mural (aluno)
+
+| Rota | Resultado |
+| --- | --- |
+| `GET /v1/mural/geral` | Recados gerais preenchidos, com `professor_nome`, do mais recente ao mais antigo. |
+| `GET /v1/mural` | Lista paginada dos recados destinados ao aluno no período de exibição, da `data_inicio` mais recente à mais antiga. |
+
+- **Período**: o recado aparece de `data_inicio` até `data_fim`, inclusive, no horário de Brasília.
+- **Quem vê**: o recado aparece para o aluno quando qualquer uma destas condições vale:
+  - o recado é para todos os alunos;
+  - o aluno está em `aluno_ids`;
+  - o aluno está em um grupo de `grupo_ids`;
+  - o recado é para todos os grupos e o aluno está em algum grupo do professor.
+- **Grupos excluídos**: não contam. Um aluno que sai do grupo deixa de ver os recados enviados a esse grupo.
+
 ---
 
 ## Limites dos códigos
