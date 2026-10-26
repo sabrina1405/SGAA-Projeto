@@ -246,3 +246,59 @@ Para conferir quem vê cada recado:
 1. Crie um recado com `data_inicio` no futuro. Ele não deve aparecer.
 2. Crie um recado só com `aluno_ids` de outro aluno. Ele também não deve aparecer.
 3. Tire o aluno do grupo destinatário (`DELETE /grupos/{id}/alunos/{aluno_id}`). O recado do grupo deve sumir do mural dele.
+
+---
+
+## Dispositivos (push)
+
+Vale para os dois tipos de usuário: use `{{token_aluno}}` ou `{{token_professor}}`. Sem token → `401`.
+
+Com `PUSH_BACKEND=console`, as notificações aparecem só no log do servidor. Para disparar uma, registre o token com o aluno e crie, com a professora, um recado para esse aluno com `data_inicio` de hoje. Para os recados agendados, rode `poetry run python -m src.scripts.processar_notificacoes`.
+
+### POST `{{base_url}}/dispositivos`
+
+**Caminho feliz** → `200`. Registrar de novo o mesmo token também responde `200`.
+
+```json
+{
+  "token": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]",
+  "plataforma": "android"
+}
+```
+
+**Caminho feliz: sem a plataforma** → `200`
+
+```json
+{
+  "token": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]"
+}
+```
+
+**Erro: token fora do formato do Expo** → `422`
+
+```json
+{
+  "token": "abc123"
+}
+```
+
+**Erro: plataforma desconhecida** → `422`
+
+```json
+{
+  "token": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]",
+  "plataforma": "windows"
+}
+```
+
+**Erro: sem o token** → `422`
+
+```json
+{}
+```
+
+### DELETE `{{base_url}}/dispositivos/{token}`
+
+- Caminho feliz: `/dispositivos/ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]` → `200`. O Postman aceita os colchetes como estão; no app, use `encodeURIComponent`.
+- Token desconhecido, de outro usuário ou já removido → também `200`, para o logout nunca falhar.
+- Erro: token com mais de 255 caracteres → `422`.

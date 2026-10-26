@@ -1,12 +1,12 @@
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Path, Query, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Path, Query, status
 from sqlalchemy.orm import Session
 
-from src.api.deps import ProfessorAtual, SessaoDep
+from src.api.deps import EnviadorPushDep, ProfessorAtual, SessaoDep
 from src.core.errors import CamposInvalidos
 from src.models.recado import Recado
-from src.schemas.aluno import AlunoListaItem
+from src.schemas.aluno import AlunoListaItem, hoje
 from src.schemas.paginacao import (
     PAGINA_MAXIMA,
     TAMANHO_MAXIMO,
@@ -24,7 +24,7 @@ from src.schemas.recado import (
 )
 from src.schemas.resposta import Resposta
 from src.schemas.tipos import ID_MAXIMO
-from src.services import recado_service, usuario_service
+from src.services import notificacao_service, recado_service, usuario_service
 
 router = APIRouter(prefix="/recados", tags=["Recados"])
 
@@ -114,13 +114,24 @@ def limpar_recado_geral(professor: ProfessorAtual, sessao: SessaoDep) -> Respost
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def criar_recado(
-    dados: RecadoCriar, professor: ProfessorAtual, sessao: SessaoDep
+    dados: RecadoCriar,
+    professor: ProfessorAtual,
+    sessao: SessaoDep,
+    enviador: EnviadorPushDep,
+    tarefas: BackgroundTasks,
 ) -> Resposta[RecadoDetalheResposta]:
-    """Precisa de ao menos um destinatário: alunos, grupos ou um dos "todos"."""
+    """Precisa de ao menos um destinatário: alunos, grupos ou um dos "todos".
+
+    Os alunos recebem um push quando o recado entra no período de exibição.
+    """
     try:
         recado = recado_service.criar_recado(sessao, professor, **dados.model_dump())
     except ERROS_DE_DESTINATARIO as erro:
         raise _destinatarios_invalidos(erro) from None
+    if recado.data_inicio <= hoje():
+        tarefas.add_task(
+            notificacao_service.processar_pendentes_sem_falhar, sessao, enviador
+        )
     return Resposta(mensagem="Recado criado", dados=_dados_recado(sessao, recado))
 
 

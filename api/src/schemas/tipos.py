@@ -263,3 +263,13 @@ ConteudoRecado = Annotated[
     AfterValidator(_normalizar_texto_longo),
     StringConstraints(min_length=1, max_length=TAMANHO_MAXIMO_RECADO),
 ]
+
+# Token do Expo, como "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]".
+TokenPush = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        max_length=255,
+        pattern=r"^Expo(nent)?PushToken\[[A-Za-z0-9_-]+\]$",
+    ),
+]

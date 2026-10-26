@@ -19,6 +19,7 @@ from alembic import command
 from src.core.config import RAIZ_API
 from src.core.database import obter_engine, obter_sessao
 from src.core.email import obter_enviador_email
+from src.core.push import FalhaPush, MensagemPush, Recibo, Ticket, obter_enviador_push
 from src.core.security import criar_token, hash_senha
 from src.main import app
 from src.models.aluno import Aluno
@@ -47,6 +48,40 @@ class EnviadorEmailFalso:
         return re.search(r"\b(\d{6})\b", self.mensagens[-1]["corpo"]).group(1)
 
 
+class EnviadorPushFalso:
+    """Guarda as mensagens. `erros` define o ticket de um token; `falhar` simula
+    o Expo fora do ar; `recibos` responde à consulta de recibos."""
+
+    def __init__(self) -> None:
+        self.mensagens: list[MensagemPush] = []
+        self.erros: dict[str, str] = {}
+        self.recibos: dict[str, Recibo] = {}
+        self.falhar = False
+        self.consultas: list[list[str]] = []
+
+    def enviar(self, mensagens: list[MensagemPush]) -> list[Ticket]:
+        if self.falhar:
+            raise FalhaPush("falha simulada no envio")
+        self.mensagens.extend(mensagens)
+        return [
+            Ticket(ok=False, erro=self.erros[mensagem.token])
+            if mensagem.token in self.erros
+            else Ticket(ok=True, id=f"ticket-{mensagem.token}")
+            for mensagem in mensagens
+        ]
+
+    def consultar_recibos(self, ids: list[str]) -> dict[str, Recibo]:
+        self.consultas.append(ids)
+        return {
+            ticket_id: self.recibos[ticket_id]
+            for ticket_id in ids
+            if ticket_id in self.recibos
+        }
+
+    def tokens(self) -> list[str]:
+        return [mensagem.token for mensagem in self.mensagens]
+
+
 @pytest.fixture(scope="session")
 def engine():
     command.upgrade(ConfigAlembic(str(RAIZ_API / "alembic.ini")), "head")
@@ -71,9 +106,15 @@ def enviador():
 
 
 @pytest.fixture
-def client(sessao, enviador):
+def enviador_push():
+    return EnviadorPushFalso()
+
+
+@pytest.fixture
+def client(sessao, enviador, enviador_push):
     app.dependency_overrides[obter_sessao] = lambda: sessao
     app.dependency_overrides[obter_enviador_email] = lambda: enviador
+    app.dependency_overrides[obter_enviador_push] = lambda: enviador_push
     yield TestClient(app)
     app.dependency_overrides.clear()
 

@@ -1,5 +1,6 @@
+import re
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, datetime, time
 
 from sqlalchemy import ColumnElement, Row, and_, delete, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
@@ -7,9 +8,11 @@ from sqlalchemy.orm import Session
 
 from src.core.security import agora
 from src.models.grupo import Grupo, GrupoAluno
+from src.models.notificacao import TipoNotificacao
 from src.models.recado import Recado, RecadoAluno, RecadoGeral, RecadoGrupo
 from src.models.usuario import Usuario
-from src.schemas.aluno import hoje
+from src.schemas.aluno import HORARIO_DE_BRASILIA, hoje
+from src.services import notificacao_service
 from src.services.usuario_service import (
     ORDEM_DOS_ALUNOS,
     consulta_alunos,
@@ -203,6 +206,9 @@ def criar_recado(
     sessao.add(recado)
     sessao.flush()
     _vincular(sessao, recado, aluno_ids, grupo_ids)
+    notificacao_service.agendar(
+        sessao, TipoNotificacao.RECADO, recado.id, _momento_do_aviso(data_inicio)
+    )
     sessao.commit()
     return recado
 
@@ -313,6 +319,14 @@ def atualizar_recado(
 
     for campo, valor in campos.items():
         setattr(recado, campo, valor)
+    if "data_inicio" in campos:
+        # Só muda o que ainda não foi enviado: editar não avisa de novo.
+        notificacao_service.reagendar(
+            sessao,
+            TipoNotificacao.RECADO,
+            recado.id,
+            _momento_do_aviso(recado.data_inicio),
+        )
     if aluno_ids_enviados is not None:
         sessao.execute(delete(RecadoAluno).where(RecadoAluno.recado_id == recado.id))
         _vincular(sessao, recado, aluno_ids_enviados, ())
@@ -350,10 +364,14 @@ def listar_recados_gerais(sessao: Session) -> Sequence[Row]:
     ).all()
 
 
-def _destinado_ao_aluno(aluno: Usuario) -> ColumnElement[bool]:
+def _destinado_a(aluno_id: int | ColumnElement[int]) -> ColumnElement[bool]:
+    """Se o recado (correlacionado na consulta externa) aparece para o aluno.
+
+    `aluno_id` pode ser uma coluna, para buscar todos os alunos de um recado.
+    """
     em_grupo_ativo = and_(
         GrupoAluno.grupo_id == Grupo.id,
-        GrupoAluno.aluno_id == aluno.id,
+        GrupoAluno.aluno_id == aluno_id,
         Grupo.deletado_em.is_(None),
     )
     return or_(
@@ -363,7 +381,7 @@ def _destinado_ao_aluno(aluno: Usuario) -> ColumnElement[bool]:
             exists().where(em_grupo_ativo, Grupo.professor_id == Recado.professor_id),
         ),
         exists().where(
-            RecadoAluno.recado_id == Recado.id, RecadoAluno.aluno_id == aluno.id
+            RecadoAluno.recado_id == Recado.id, RecadoAluno.aluno_id == aluno_id
         ),
         exists().where(
             RecadoGrupo.recado_id == Recado.id,
@@ -384,7 +402,7 @@ def listar_mural(
         Usuario.deletado_em.is_(None),
         Recado.data_inicio <= data,
         or_(Recado.data_fim.is_(None), Recado.data_fim >= data),
-        _destinado_ao_aluno(aluno),
+        _destinado_a(aluno.id),
     )
     do_mural = (
         select()
@@ -408,3 +426,57 @@ def listar_mural(
         .offset((pagina - 1) * tamanho)
     ).all()
     return itens, total
+
+
+# --- notificação push ---
+
+HORA_DO_AVISO_AGENDADO = time(7, tzinfo=HORARIO_DE_BRASILIA)
+TAMANHO_DO_RESUMO = 120
+
+
+def _momento_do_aviso(data_inicio: date) -> datetime:
+    """Recado que já começou é avisado na hora; o futuro, no dia, às 7h."""
+    if data_inicio <= hoje():
+        return agora()
+    return datetime.combine(data_inicio, HORA_DO_AVISO_AGENDADO)
+
+
+def _resumo(conteudo: str) -> str:
+    """Texto curto para a notificação, sem a marcação mais comum do Markdown."""
+    texto = " ".join(re.sub(r"[*_#>`~]", "", conteudo).split())
+    if len(texto) <= TAMANHO_DO_RESUMO:
+        return texto
+    return texto[: TAMANHO_DO_RESUMO - 1].rstrip() + "…"
+
+
+def conteudo_da_notificacao(
+    sessao: Session, recado_id: int
+) -> notificacao_service.Conteudo | None:
+    """Resolvedor do push de recado novo: os alunos que veem o recado no mural.
+
+    None se o recado foi excluído ou não está no período de exibição.
+    """
+    recado = sessao.get(Recado, recado_id)
+    data = hoje()
+    if (
+        recado is None
+        or recado.deletado_em is not None
+        or recado.data_inicio > data
+        or (recado.data_fim is not None and recado.data_fim < data)
+    ):
+        return None
+    professor = sessao.get(Usuario, recado.professor_id)
+    if professor is None or professor.deletado_em is not None:
+        return None
+    usuario_ids = sessao.scalars(
+        consulta_alunos()
+        .with_only_columns(Usuario.id)
+        .join(Recado, Recado.id == recado.id)
+        .where(_destinado_a(Usuario.id))
+    ).all()
+    return notificacao_service.Conteudo(
+        usuario_ids=usuario_ids,
+        titulo=f"Novo recado de {professor.nome_completo}",
+        corpo=_resumo(recado.conteudo),
+        dados={"tipo": TipoNotificacao.RECADO.value, "recado_id": recado.id},
+    )

@@ -235,6 +235,20 @@ Campos que o aluno pode editar:
   - o recado é para todos os grupos e o aluno está em algum grupo do professor.
 - **Grupos excluídos**: não contam. Um aluno que sai do grupo deixa de ver os recados enviados a esse grupo.
 
+### Notificações push
+
+| Rota | Resultado |
+| --- | --- |
+| `POST /v1/dispositivos` | Registra o `ExpoPushToken` do aparelho. Vale para professor e aluno. |
+| `DELETE /v1/dispositivos/{token}` | Para de enviar push ao aparelho. |
+
+- **Quando registrar**: depois do login, com `{"token": "ExponentPushToken[...]", "plataforma": "android"}`. `plataforma` é opcional (`android` ou `ios`). Registrar de novo o mesmo token não é erro; se o token estava com outro usuário (troca de conta no aparelho), ele passa para o usuário atual.
+- **Quando remover**: no logout. Token desconhecido, de outro usuário ou já removido também responde `200`. `POST /v1/auth/sair-de-todos` remove todos os aparelhos do usuário.
+- **Token inválido**: o Expo avisa quando um token deixa de valer (app desinstalado, por exemplo), e a API para de usá-lo. O app deve registrar o token a cada login, para recuperar esse caso.
+- **Recado novo**: o aluno que vê o recado no mural recebe o push quando o recado entra no período de exibição. Na hora, se `data_inicio` é hoje ou já passou; às 7h (horário de Brasília) do dia de início, se é futura. Mudar `data_inicio` antes do envio muda o horário. Editar um recado já avisado não gera outro push, e um recado excluído antes do envio não é avisado.
+- **Conteúdo**: o título é "Novo recado de {professor}" e o corpo traz o começo do texto, sem a marcação do Markdown.
+- **`dados`**: cada push leva um objeto para o app abrir a tela certa ao tocar na notificação. No recado: `{"tipo": "recado", "recado_id": 41}`.
+
 ---
 
 ## Limites dos códigos

@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from src.core.database import obter_sessao
 from src.core.email import EnviadorEmail, obter_enviador_email
+from src.core.push import EnviadorPush, obter_enviador_push
 from src.core.security import (
     TokenInvalido,
     decodificar_token,
@@ -31,6 +32,7 @@ from src.models.usuario import TipoUsuario, Usuario
 
 SessaoDep = Annotated[Session, Depends(obter_sessao)]
 EnviadorEmailDep = Annotated[EnviadorEmail, Depends(obter_enviador_email)]
+EnviadorPushDep = Annotated[EnviadorPush, Depends(obter_enviador_push)]
 
 _esquema_bearer = HTTPBearer(auto_error=False)
 

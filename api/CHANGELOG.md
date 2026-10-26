@@ -21,7 +21,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
-Banco: revisão `0006` do Alembic.
+Banco: revisão `0007` do Alembic.
 
 ### Adicionado
 
@@ -43,11 +43,15 @@ Banco: revisão `0006` do Alembic.
 - Mural de recados. A professora mantém o recado geral, visível a todos os alunos, em `GET`, `PUT` e `DELETE /v1/recados/geral`. Os recados com período de exibição ficam em `/v1/recados`: criar, listar o histórico, detalhar, editar e excluir. Cada recado vai para alunos e grupos escolhidos, para todos os alunos ou para todos os grupos. O texto aceita Markdown.
 - Mural do aluno: `GET /v1/mural/geral` traz os recados gerais e `GET /v1/mural` os recados destinados a ele que estão no período de exibição.
 - Tabelas `recado_geral`, `recado`, `recado_aluno` e `recado_grupo` (migração `0006`).
+- Notificações push pelo Expo Push Service. O app registra o aparelho em `POST /v1/dispositivos` e o remove no logout em `DELETE /v1/dispositivos/{token}`; `POST /v1/auth/sair-de-todos` também remove todos os aparelhos do usuário. O aluno recebe um push quando um recado destinado a ele entra no período de exibição: na hora, se começa hoje, ou às 7h do dia de início.
+- Fila de envio com novas tentativas e conferência dos recibos do Expo, processada pela tarefa agendada (`python -m src.scripts.processar_notificacoes` localmente). Tokens que não valem mais são desativados.
+- Variáveis `PUSH_BACKEND` (`console` ou `expo`) e `EXPO_ACCESS_TOKEN`.
+- Tabelas `dispositivo`, `notificacao` e `envio_push` (migração `0007`).
 - Envio de e-mail com backend `console` (apenas loga) ou `smtp`.
 - Script de criação da conta da professora: `python -m src.scripts.criar_professor`. Pergunta também o CNPJ (numérico ou alfanumérico) e a chave Pix, ambos opcionais.
 - Script `aplicar_migracoes.sh`, para aplicar as migrações em produção ou homologação.
 - Observabilidade com o Logfire, ligada pela variável `LOGFIRE_TOKEN`: requisições, consultas SQL, exceções e logs, sem enviar os dados recebidos nas rotas.
-- Testes automatizados de autenticação, primeiro acesso, usuários, alunos, perfil, grupos, recados e schemas.
+- Testes automatizados de autenticação, primeiro acesso, usuários, alunos, perfil, grupos, recados, notificações push e schemas.
 - Documentação: guia de migrações com Alembic, variáveis de ambiente e comandos úteis.
 
 ### Alterado
