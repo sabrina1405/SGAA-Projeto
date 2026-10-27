@@ -21,7 +21,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
-Banco: revisão `0007` do Alembic.
+Banco: revisão `0008` do Alembic.
 
 ### Adicionado
 
@@ -47,11 +47,16 @@ Banco: revisão `0007` do Alembic.
 - Fila de envio com novas tentativas e conferência dos recibos do Expo, processada pela tarefa agendada (`python -m src.scripts.processar_notificacoes` localmente). Tokens que não valem mais são desativados.
 - Variáveis `PUSH_BACKEND` (`console` ou `expo`) e `EXPO_ACCESS_TOKEN`.
 - Tabelas `dispositivo`, `notificacao` e `envio_push` (migração `0007`).
+- Agenda de aulas da professora em `/v1/aulas`: criar, listar por período (com filtros de status, aluno e grupo), detalhar, editar, cancelar e mudar os alunos. Cada aula tem um ou mais alunos, diretos ou por grupos, e pode se repetir toda semana por até 26 semanas. Edição e cancelamento valem para uma aula ou para ela e as seguintes da série. Aulas sobrepostas da mesma professora geram `409`.
+- Reposições: o aluno que cancela a participação, ou a aula cancelada com `repor`, entra em `GET /v1/aulas/reposicoes-pendentes`. A aula criada com `reposicao_de_aula_id` resolve a pendência, e `DELETE /v1/aulas/reposicoes-pendentes/{aula_id}/{aluno_id}` a dispensa.
+- Agenda do aluno: `GET /v1/agenda` e `GET /v1/agenda/{aula_id}`, e `POST /v1/agenda/{aula_id}/cancelar` para cancelar a participação.
+- Push de aulas: lembretes aos alunos 1 semana, 1 dia e 30 minutos antes; aviso aos alunos quando a aula é cancelada; aviso à professora quando um aluno cancela.
+- Tabelas `aula`, `aula_aluno` e `aula_grupo` (migração `0008`).
 - Envio de e-mail com backend `console` (apenas loga) ou `smtp`.
 - Script de criação da conta da professora: `python -m src.scripts.criar_professor`. Pergunta também o CNPJ (numérico ou alfanumérico) e a chave Pix, ambos opcionais.
 - Script `aplicar_migracoes.sh`, para aplicar as migrações em produção ou homologação.
 - Observabilidade com o Logfire, ligada pela variável `LOGFIRE_TOKEN`: requisições, consultas SQL, exceções e logs, sem enviar os dados recebidos nas rotas.
-- Testes automatizados de autenticação, primeiro acesso, usuários, alunos, perfil, grupos, recados, notificações push e schemas.
+- Testes automatizados de autenticação, primeiro acesso, usuários, alunos, perfil, grupos, recados, aulas, agenda, notificações push e schemas.
 - Documentação: guia de migrações com Alembic, variáveis de ambiente e comandos úteis.
 
 ### Alterado

@@ -13,6 +13,7 @@ from src.models.recado import Recado, RecadoAluno, RecadoGeral, RecadoGrupo
 from src.models.usuario import Usuario
 from src.schemas.aluno import HORARIO_DE_BRASILIA, hoje
 from src.services import notificacao_service
+from src.services.grupo_service import validar_grupos
 from src.services.usuario_service import (
     ORDEM_DOS_ALUNOS,
     consulta_alunos,
@@ -22,12 +23,6 @@ from src.services.usuario_service import (
 
 class RecadoNaoEncontrado(Exception):
     pass
-
-
-class GruposInvalidos(Exception):
-    def __init__(self, ids: list[int]) -> None:
-        super().__init__(ids)
-        self.ids = ids
 
 
 class RecadoInvalido(Exception):
@@ -84,26 +79,6 @@ def _recado_do_professor(sessao: Session, professor: Usuario, recado_id: int) ->
     ):
         raise RecadoNaoEncontrado
     return recado
-
-
-def _validar_grupos(
-    sessao: Session, professor: Usuario, grupo_ids: Sequence[int]
-) -> None:
-    """Levanta GruposInvalidos com os ids que não são de grupos do professor."""
-    if not grupo_ids:
-        return
-    validos = set(
-        sessao.scalars(
-            select(Grupo.id).where(
-                Grupo.id.in_(grupo_ids),
-                Grupo.professor_id == professor.id,
-                Grupo.deletado_em.is_(None),
-            )
-        )
-    )
-    invalidos = [grupo_id for grupo_id in grupo_ids if grupo_id not in validos]
-    if invalidos:
-        raise GruposInvalidos(invalidos)
 
 
 def _conferir_recado(
@@ -194,7 +169,7 @@ def criar_recado(
         grupo_ids=grupo_ids,
     )
     validar_alunos(sessao, aluno_ids)
-    _validar_grupos(sessao, professor, grupo_ids)
+    validar_grupos(sessao, professor, grupo_ids)
     recado = Recado(
         professor_id=professor.id,
         conteudo=conteudo,
@@ -315,7 +290,7 @@ def atualizar_recado(
     if aluno_ids_enviados is not None:
         validar_alunos(sessao, aluno_ids_enviados)
     if grupo_ids_enviados is not None:
-        _validar_grupos(sessao, professor, grupo_ids_enviados)
+        validar_grupos(sessao, professor, grupo_ids_enviados)
 
     for campo, valor in campos.items():
         setattr(recado, campo, valor)

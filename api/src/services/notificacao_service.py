@@ -57,9 +57,12 @@ Resolvedor = Callable[[Session, int], Conteudo | None]
 
 def _resolvedores() -> dict[TipoNotificacao, Resolvedor]:
     # Import local: os services das features importam este módulo para agendar.
-    from src.services import recado_service
+    from src.services import aula_service, recado_service
 
-    return {TipoNotificacao.RECADO: recado_service.conteudo_da_notificacao}
+    return {
+        TipoNotificacao.RECADO: recado_service.conteudo_da_notificacao,
+        **aula_service.RESOLVEDORES,
+    }
 
 
 def agendar(
@@ -81,6 +84,22 @@ def reagendar(
             Notificacao.processada_em.is_(None),
         )
         .values(enviar_em=enviar_em)
+    )
+
+
+def cancelar_pendentes(
+    sessao: Session, tipo: TipoNotificacao, referencia_id: int
+) -> None:
+    """Descarta as notificações ainda não enviadas. Não faz commit."""
+    sessao.execute(
+        update(Notificacao)
+        .where(
+            Notificacao.tipo == tipo,
+            Notificacao.referencia_id == referencia_id,
+            Notificacao.processada_em.is_(None),
+            Notificacao.deletado_em.is_(None),
+        )
+        .values(deletado_em=agora())
     )
 
 

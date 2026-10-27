@@ -24,6 +24,7 @@ ID_MAXIMO = 2_147_483_647
 TAMANHO_MAXIMO_CHAVE_PIX = 77
 MAXIMO_IDS_POR_CHAMADA = 100
 TAMANHO_MAXIMO_RECADO = 5000
+TAMANHO_MAXIMO_ANOTACOES = 5000
 
 
 def _remover_espacos_das_pontas(valor: object) -> object:
@@ -262,6 +263,27 @@ ConteudoRecado = Annotated[
     str,
     AfterValidator(_normalizar_texto_longo),
     StringConstraints(min_length=1, max_length=TAMANHO_MAXIMO_RECADO),
+]
+
+TituloAula = Annotated[
+    str,
+    AfterValidator(_normalizar_nome),
+    StringConstraints(min_length=1, max_length=75),
+]
+DescricaoAula = Annotated[
+    str,
+    AfterValidator(_normalizar_nome),
+    StringConstraints(min_length=1, max_length=150),
+]
+AnotacoesAula = Annotated[
+    str,
+    AfterValidator(_normalizar_texto_longo),
+    StringConstraints(min_length=1, max_length=TAMANHO_MAXIMO_ANOTACOES),
+]
+MotivoCancelamento = Annotated[
+    str,
+    AfterValidator(_normalizar_nome),
+    StringConstraints(min_length=1, max_length=150),
 ]
 
 # Token do Expo, como "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]".

@@ -24,7 +24,12 @@ from src.schemas.recado import (
 )
 from src.schemas.resposta import Resposta
 from src.schemas.tipos import ID_MAXIMO
-from src.services import notificacao_service, recado_service, usuario_service
+from src.services import (
+    grupo_service,
+    notificacao_service,
+    recado_service,
+    usuario_service,
+)
 
 router = APIRouter(prefix="/recados", tags=["Recados"])
 
@@ -55,14 +60,14 @@ def _recado_nao_encontrado() -> HTTPException:
 
 ERROS_DE_DESTINATARIO = (
     recado_service.RecadoInvalido,
-    recado_service.GruposInvalidos,
+    grupo_service.GruposInvalidos,
     usuario_service.AlunosInvalidos,
 )
 
 
 def _destinatarios_invalidos(
     erro: recado_service.RecadoInvalido
-    | recado_service.GruposInvalidos
+    | grupo_service.GruposInvalidos
     | usuario_service.AlunosInvalidos,
 ) -> CamposInvalidos:
     if isinstance(erro, recado_service.RecadoInvalido):

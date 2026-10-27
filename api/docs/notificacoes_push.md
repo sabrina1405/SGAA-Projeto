@@ -15,7 +15,7 @@ As rotas e regras de negócio estão em [Fluxos da API](../../docs/api/fluxos.md
 Feature (ex.: criar recado) ──> grava o recado + uma linha em `notificacao` (mesma transação)
         │
         └─ se já venceu, tenta enviar logo depois da requisição
-Tarefa agendada (a cada 15 min) ──> envia as pendentes vencidas + confere os recibos do Expo
+Tarefa agendada (a cada 5 min) ──> envia as pendentes vencidas + confere os recibos do Expo
 Envio: resolvedor do tipo ──> usuários ──> dispositivos ativos ──> Expo (lotes de 100)
 ```
 
@@ -53,7 +53,8 @@ Com `LOGFIRE_TOKEN` definido, o backend `console` envia ao Logfire o token do ap
 - **Localmente:** `poetry run python -m src.scripts.processar_notificacoes`.
 - **Na AWS Lambda** (feito na branch do deploy):
   - `lambda_handler.handler` desvia para a tarefa quando o evento é `{"tarefa": "processar_notificacoes"}`. Os outros eventos seguem para o Mangum.
-  - No `template.yaml`, um evento `Schedule` na função, com `rate(15 minutes)` e esse `Input`. São cerca de 2.900 invocações por mês, dentro da cota gratuita da Lambda e do EventBridge.
+  - No `template.yaml`, um evento `Schedule` na função, com `rate(5 minutes)` e esse `Input`. São cerca de 8.700 invocações por mês, menos de 1% da cota gratuita da Lambda (1 milhão de requisições por mês). A regra agendada do EventBridge não é cobrada por disparo.
+  - O intervalo é de 5 minutos por causa do lembrete de 30 minutos antes da aula: ele chega com até 5 minutos de atraso. Com 15 minutos, poderia chegar só 15 minutos antes da aula.
   - Não há rota pública nem segredo extra.
 
 ## Como adicionar um tipo novo de notificação
