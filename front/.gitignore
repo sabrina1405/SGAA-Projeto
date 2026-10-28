@@ -30,7 +30,6 @@ expo-env.d.ts
 
 # Logs
 npm-debug.*
-yarn-debug.*
 yarn-error.*
 *.log
 
