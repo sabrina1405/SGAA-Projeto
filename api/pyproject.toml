@@ -18,7 +18,8 @@ argon2-cffi = "25.1.0"
 pydantic-settings = "2.15.0"
 email-validator = "2.3.0"
 pydantic = "2.13.5"
-logfire = {extras = ["fastapi", "psycopg"], version = "5.1.1"}
+logfire = {extras = ["fastapi", "psycopg"], version = "5.2.0"}
+mangum = "0.22.0"
 
 
 [build-system]
@@ -29,5 +30,6 @@ build-backend = "poetry.core.masonry.api"
 dev = [
     "ruff (==0.16.10)",
     "pytest (==9.1.1)",
-    "httpx (==0.28.1)"
+    "httpx (==0.28.1)",
+    "boto3 (==1.43.110)"
 ]

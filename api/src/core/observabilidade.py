@@ -52,10 +52,9 @@ class FlushMiddleware:
                     logger.exception("Falha ao enviar registros ao Logfire")
 
 
-def configurar_observabilidade(
-    app_rotas: FastAPI, app_externo: FastAPI, ambiente: str
-) -> bool:
-    """Liga o envio de registros ao Logfire. Sem LOGFIRE_TOKEN, não faz nada."""
+def configurar_logfire(ambiente: str, versao: str) -> bool:
+    """Liga o envio de registros e das consultas ao banco. Sem LOGFIRE_TOKEN,
+    não faz nada."""
     token = obter_config().logfire_token
     if token is None:
         return False
@@ -63,18 +62,31 @@ def configurar_observabilidade(
     logfire.configure(
         token=token.get_secret_value(),
         service_name="sgaa-api",
-        service_version=app_rotas.version,
+        service_version=versao,
         environment=ambiente,
         console=False,
         scrubbing=logfire.ScrubbingOptions(extra_patterns=PADROES_SENSIVEIS),
     )
-    logfire.instrument_fastapi(app_rotas, request_attributes_mapper=_sem_valores)
     # No driver, e não no SQLAlchemy: a instrumentação do SQLAlchemy ainda não
     # aceita a versão 2.1. Os parâmetros das consultas não são capturados.
     logfire.instrument_psycopg()
 
     logging.getLogger().addHandler(logfire.LogfireLoggingHandler())
+    return True
 
-    if os.getenv("VERCEL"):
+
+def configurar_observabilidade(
+    app_rotas: FastAPI, app_externo: FastAPI, ambiente: str
+) -> bool:
+    """Liga o Logfire e instrumenta as rotas. Sem LOGFIRE_TOKEN, não faz nada."""
+    if not configurar_logfire(ambiente, app_rotas.version):
+        return False
+    logfire.instrument_fastapi(app_rotas, request_attributes_mapper=_sem_valores)
+    if em_serverless():
         app_externo.add_middleware(FlushMiddleware)
     return True
+
+
+def em_serverless() -> bool:
+    """Na Vercel ou na AWS Lambda, onde a instância congela após a resposta."""
+    return bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))

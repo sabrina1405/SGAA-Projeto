@@ -52,6 +52,9 @@ Banco: revisão `0008` do Alembic.
 - Agenda do aluno: `GET /v1/agenda` e `GET /v1/agenda/{aula_id}`, e `POST /v1/agenda/{aula_id}/cancelar` para cancelar a participação.
 - Push de aulas: lembretes aos alunos 1 semana, 1 dia e 30 minutos antes; aviso aos alunos quando a aula é cancelada; aviso à professora quando um aluno cancela.
 - Tabelas `aula`, `aula_aluno` e `aula_grupo` (migração `0008`).
+- Deploy na AWS Lambda com o AWS SAM (`template.yaml`, `samconfig.toml`, `deploy_lambda.sh`), em homologação e produção. A API fica atrás do CloudFront, com rate limit pelo WAF, e recusa com `403` as chamadas que não passam por ele (`CLOUDFRONT_SEGREDO`). A tarefa agendada da fila de push é uma função própria, chamada pelo EventBridge a cada 5 minutos.
+- Configuração lida do Parameter Store na partida da Lambda (`SSM_PREFIXO`). A variável `AMBIENTE` identifica o ambiente em `/api/health` e no Logfire.
+- Dependências: `mangum` 0.22.0 e, no grupo dev, `boto3` 1.43.110.
 - Envio de e-mail com backend `console` (apenas loga) ou `smtp`.
 - Script de criação da conta da professora: `python -m src.scripts.criar_professor`. Pergunta também o CNPJ (numérico ou alfanumérico) e a chave Pix, ambos opcionais.
 - Script `aplicar_migracoes.sh`, para aplicar as migrações em produção ou homologação.
@@ -61,5 +64,6 @@ Banco: revisão `0008` do Alembic.
 
 ### Alterado
 
+- `logfire` 5.1.1 → 5.2.0, para levar o OpenTelemetry a 1.45.1 (CVE-2026-114603 no `opentelemetry-api` 1.44.0). Transitivas atualizadas: `certifi` 2026.10.23 (PYSEC-2026-4320) e `dnspython` 2.9.0 (CVE-2026-114605).
 - Dependências com versões fixas no `pyproject.toml`.
 - Nome padrão dos bancos: `sgaa_dev` para desenvolvimento e `sgaa_test` para testes.

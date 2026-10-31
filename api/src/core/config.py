@@ -33,6 +33,10 @@ class Config(BaseSettings):
     # Token de escrita do Logfire. Sem ele, a observabilidade fica desligada.
     logfire_token: SecretStr | None = None
 
+    # Na AWS: valor que o CloudFront envia no cabeçalho X-Origem-Cloudfront.
+    # Com ele definido, a API recusa as chamadas que não passaram pelo CloudFront.
+    cloudfront_segredo: SecretStr | None = None
+
     # Origens separadas por vírgula. O app mobile não depende de CORS.
     cors_origins: str = "http://localhost:8081"
 
