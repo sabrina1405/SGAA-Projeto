@@ -49,6 +49,12 @@ class PerfilNaoEncontrado(Exception):
     pass
 
 
+class AlunosInvalidos(Exception):
+    def __init__(self, ids: list[int]) -> None:
+        super().__init__(ids)
+        self.ids = ids
+
+
 class CamposNaoPermitidos(Exception):
     def __init__(self, campos: list[str]) -> None:
         super().__init__(campos)
@@ -223,6 +229,22 @@ def consulta_alunos() -> Select:
             Usuario.senha.is_not(None),
         )
     )
+
+
+def validar_alunos(sessao: Session, aluno_ids: Sequence[int]) -> None:
+    """Levanta AlunosInvalidos com os ids que não são de alunos ativos."""
+    if not aluno_ids:
+        return
+    validos = set(
+        sessao.scalars(
+            consulta_alunos()
+            .with_only_columns(Usuario.id)
+            .where(Usuario.id.in_(aluno_ids))
+        )
+    )
+    invalidos = [aluno_id for aluno_id in aluno_ids if aluno_id not in validos]
+    if invalidos:
+        raise AlunosInvalidos(invalidos)
 
 
 def listar_alunos(

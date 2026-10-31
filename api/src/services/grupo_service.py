@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session
 from src.core.security import agora
 from src.models.grupo import Grupo, GrupoAluno
 from src.models.usuario import Usuario
-from src.services.usuario_service import ORDEM_DOS_ALUNOS, consulta_alunos
+from src.services.usuario_service import (
+    ORDEM_DOS_ALUNOS,
+    consulta_alunos,
+    validar_alunos,
+)
 
 
 class GrupoNaoEncontrado(Exception):
@@ -16,12 +20,6 @@ class GrupoNaoEncontrado(Exception):
 
 class AlunoForaDoGrupo(Exception):
     pass
-
-
-class AlunosInvalidos(Exception):
-    def __init__(self, ids: list[int]) -> None:
-        super().__init__(ids)
-        self.ids = ids
 
 
 def _grupo_do_professor(sessao: Session, professor: Usuario, grupo_id: int) -> Grupo:
@@ -33,22 +31,6 @@ def _grupo_do_professor(sessao: Session, professor: Usuario, grupo_id: int) -> G
     ):
         raise GrupoNaoEncontrado
     return grupo
-
-
-def _validar_alunos(sessao: Session, aluno_ids: Sequence[int]) -> None:
-    """Levanta AlunosInvalidos com os ids que não são de alunos ativos."""
-    if not aluno_ids:
-        return
-    validos = set(
-        sessao.scalars(
-            consulta_alunos()
-            .with_only_columns(Usuario.id)
-            .where(Usuario.id.in_(aluno_ids))
-        )
-    )
-    invalidos = [aluno_id for aluno_id in aluno_ids if aluno_id not in validos]
-    if invalidos:
-        raise AlunosInvalidos(invalidos)
 
 
 def _vincular(sessao: Session, grupo: Grupo, aluno_ids: Sequence[int]) -> None:
@@ -73,7 +55,7 @@ def criar_grupo(
     aluno_ids: Sequence[int] = (),
 ) -> Grupo:
     """Levanta AlunosInvalidos, sem criar o grupo."""
-    _validar_alunos(sessao, aluno_ids)
+    validar_alunos(sessao, aluno_ids)
     grupo = Grupo(titulo=titulo, descricao=descricao, professor_id=professor.id)
     sessao.add(grupo)
     sessao.flush()
@@ -152,7 +134,7 @@ def adicionar_alunos(
 ) -> Grupo:
     """Levanta GrupoNaoEncontrado e AlunosInvalidos, sem adicionar nenhum."""
     grupo = _grupo_do_professor(sessao, professor, grupo_id)
-    _validar_alunos(sessao, aluno_ids)
+    validar_alunos(sessao, aluno_ids)
     _vincular(sessao, grupo, aluno_ids)
     sessao.commit()
     return grupo

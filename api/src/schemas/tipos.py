@@ -23,6 +23,7 @@ ID_MAXIMO = 2_147_483_647
 # Tamanho máximo de uma chave Pix do tipo e-mail.
 TAMANHO_MAXIMO_CHAVE_PIX = 77
 MAXIMO_IDS_POR_CHAMADA = 100
+TAMANHO_MAXIMO_RECADO = 5000
 
 
 def _remover_espacos_das_pontas(valor: object) -> object:
@@ -42,6 +43,18 @@ def _normalizar_nome(valor: str) -> str:
     valor = " ".join(unicodedata.normalize("NFC", valor).split())
     if any(unicodedata.category(caractere).startswith("C") for caractere in valor):
         raise ValueError("o nome contém caracteres inválidos")
+    return valor
+
+
+def _normalizar_texto_longo(valor: str) -> str:
+    """Mantém as quebras de linha e o Markdown; só tira os espaços das pontas."""
+    valor = unicodedata.normalize("NFC", valor.replace("\r\n", "\n")).strip()
+    # Formatação invisível (Cf), como o ZWJ dos emojis compostos, é aceita.
+    if any(
+        unicodedata.category(caractere) == "Cc" and caractere not in "\n\t"
+        for caractere in valor
+    ):
+        raise ValueError("o texto contém caracteres inválidos")
     return valor
 
 
@@ -236,4 +249,17 @@ IdsDeAlunos = Annotated[
     list[IdBanco],
     Field(max_length=MAXIMO_IDS_POR_CHAMADA),
     AfterValidator(_sem_repeticao),
+]
+
+IdsDeGrupos = Annotated[
+    list[IdBanco],
+    Field(max_length=MAXIMO_IDS_POR_CHAMADA),
+    AfterValidator(_sem_repeticao),
+]
+
+# Texto em Markdown, renderizado pelo front.
+ConteudoRecado = Annotated[
+    str,
+    AfterValidator(_normalizar_texto_longo),
+    StringConstraints(min_length=1, max_length=TAMANHO_MAXIMO_RECADO),
 ]

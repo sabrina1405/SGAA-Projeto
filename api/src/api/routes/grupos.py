@@ -22,7 +22,7 @@ from src.schemas.paginacao import (
 )
 from src.schemas.resposta import Resposta
 from src.schemas.tipos import ID_MAXIMO
-from src.services import grupo_service
+from src.services import grupo_service, usuario_service
 
 router = APIRouter(prefix="/grupos", tags=["Grupos"])
 
@@ -45,7 +45,7 @@ def _grupo_nao_encontrado() -> HTTPException:
     )
 
 
-def _alunos_invalidos(erro: grupo_service.AlunosInvalidos) -> CamposInvalidos:
+def _alunos_invalidos(erro: usuario_service.AlunosInvalidos) -> CamposInvalidos:
     ids = ", ".join(str(aluno_id) for aluno_id in erro.ids)
     return CamposInvalidos(
         "aluno_invalido", f"aluno não encontrado: {ids}", ["aluno_ids"]
@@ -65,7 +65,7 @@ def criar_grupo(
             descricao=dados.descricao,
             aluno_ids=dados.aluno_ids,
         )
-    except grupo_service.AlunosInvalidos as erro:
+    except usuario_service.AlunosInvalidos as erro:
         raise _alunos_invalidos(erro) from None
     return Resposta(mensagem="Grupo criado", dados=_dados_grupo(sessao, grupo))
 
@@ -142,7 +142,7 @@ def adicionar_alunos(
         )
     except grupo_service.GrupoNaoEncontrado:
         raise _grupo_nao_encontrado() from None
-    except grupo_service.AlunosInvalidos as erro:
+    except usuario_service.AlunosInvalidos as erro:
         raise _alunos_invalidos(erro) from None
     return Resposta(mensagem="Alunos adicionados", dados=_dados_grupo(sessao, grupo))
 

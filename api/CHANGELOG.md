@@ -21,7 +21,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
-Banco: revisão `0005` do Alembic.
+Banco: revisão `0006` do Alembic.
 
 ### Adicionado
 
@@ -40,11 +40,14 @@ Banco: revisão `0005` do Alembic.
 - Grupos de alunos para a professora em `/v1/grupos`: criar (só o título é obrigatório), listar, detalhar, editar e excluir. Os alunos entram na criação ou depois, em `POST /v1/grupos/{id}/alunos`, e saem em `DELETE /v1/grupos/{id}/alunos/{aluno_id}`. Um aluno pode estar em vários grupos.
 - Tabela `professor` (migração `0004`), com CNPJ e chave Pix opcionais. As contas de professor que já existem ganham a linha correspondente na própria migração.
 - Tabelas `grupo` e `grupo_aluno` (migração `0005`).
+- Mural de recados. A professora mantém o recado geral, visível a todos os alunos, em `GET`, `PUT` e `DELETE /v1/recados/geral`. Os recados com período de exibição ficam em `/v1/recados`: criar, listar o histórico, detalhar, editar e excluir. Cada recado vai para alunos e grupos escolhidos, para todos os alunos ou para todos os grupos. O texto aceita Markdown.
+- Mural do aluno: `GET /v1/mural/geral` traz os recados gerais e `GET /v1/mural` os recados destinados a ele que estão no período de exibição.
+- Tabelas `recado_geral`, `recado`, `recado_aluno` e `recado_grupo` (migração `0006`).
 - Envio de e-mail com backend `console` (apenas loga) ou `smtp`.
 - Script de criação da conta da professora: `python -m src.scripts.criar_professor`. Pergunta também o CNPJ (numérico ou alfanumérico) e a chave Pix, ambos opcionais.
 - Script `aplicar_migracoes.sh`, para aplicar as migrações em produção ou homologação.
 - Observabilidade com o Logfire, ligada pela variável `LOGFIRE_TOKEN`: requisições, consultas SQL, exceções e logs, sem enviar os dados recebidos nas rotas.
-- Testes automatizados de autenticação, primeiro acesso, usuários, alunos, perfil, grupos e schemas.
+- Testes automatizados de autenticação, primeiro acesso, usuários, alunos, perfil, grupos, recados e schemas.
 - Documentação: guia de migrações com Alembic, variáveis de ambiente e comandos úteis.
 
 ### Alterado
