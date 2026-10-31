@@ -2,8 +2,8 @@ export type StatusPagamento = 'pago' | 'pendente' | 'vencido';
 
 export interface Lancamento {
   id: string;
-  dataAgendada: string; // ISO: AAAA-MM-DD
-  dataPagamento: string | null; // null enquanto não foi pago
+  dataAgendada: string; 
+  dataPagamento: string | null;
   alunoNome: string;
   valor: number;
   status: StatusPagamento;
