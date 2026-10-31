@@ -21,6 +21,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from src.core.database import obter_sessao
+from src.core.drive import ArmazenamentoDrive, obter_drive_na_requisicao
 from src.core.email import EnviadorEmail, obter_enviador_email
 from src.core.push import EnviadorPush, obter_enviador_push_na_requisicao
 from src.core.security import (
@@ -33,6 +34,7 @@ from src.models.usuario import TipoUsuario, Usuario
 SessaoDep = Annotated[Session, Depends(obter_sessao)]
 EnviadorEmailDep = Annotated[EnviadorEmail, Depends(obter_enviador_email)]
 EnviadorPushDep = Annotated[EnviadorPush, Depends(obter_enviador_push_na_requisicao)]
+DriveDep = Annotated[ArmazenamentoDrive, Depends(obter_drive_na_requisicao)]
 
 _esquema_bearer = HTTPBearer(auto_error=False)
 

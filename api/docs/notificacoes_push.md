@@ -15,7 +15,7 @@ As rotas e regras de negócio estão em [Fluxos da API](../../docs/api/fluxos.md
 Feature (ex.: criar recado) ──> grava o recado + uma linha em `notificacao` (mesma transação)
         │
         └─ se já venceu, tenta enviar logo depois da requisição
-Tarefa agendada (a cada 5 min) ──> envia as pendentes vencidas + confere os recibos do Expo
+Tarefa agendada (a cada 5 min) ──> envia as pendentes vencidas + confere os recibos do Expo + limpa os arquivos do Drive
 Envio: resolvedor do tipo ──> usuários ──> dispositivos ativos ──> Expo (lotes de 100)
 ```
 
@@ -52,7 +52,7 @@ Com `LOGFIRE_TOKEN` definido, o backend `console` envia ao Logfire o token do ap
 
 ## Tarefa agendada
 
-- **Ponto de entrada:** `notificacao_service.executar_tarefa_agendada()`. Ela processa a fila e confere os recibos.
+- **Ponto de entrada:** `notificacao_service.executar_tarefa_agendada()`. Ela processa a fila, confere os recibos e, por último, apaga os arquivos abandonados ou removidos do [Google Drive](google_drive.md). Uma falha na limpeza não afeta o resto.
 - **Localmente:** `poetry run python -m src.scripts.processar_notificacoes`.
 - **Na AWS Lambda:** a função própria `sgaa-api-tarefa-<ambiente>` (`lambda_tarefa.handler`), separada da API, com timeout de 60 s e log group próprio. Ver [Deploy na AWS Lambda](deploy_aws_lambda.md).
   - No `template.yaml`, um evento `Schedule` com `rate(5 minutes)`, ajustável pelo parâmetro `IntervaloTarefa`. São cerca de 8.700 invocações por mês por ambiente, menos de 1% da cota gratuita da Lambda (1 milhão de requisições por mês). A regra agendada do EventBridge não é cobrada por disparo.

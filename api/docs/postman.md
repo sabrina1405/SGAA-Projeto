@@ -531,6 +531,347 @@ Use `{{token_aluno}}`. Com o token da professora, a resposta é `403`.
 
 ---
 
+## Arquivos
+
+Vale para os dois tipos de usuário: use `{{token_professor}}` ou `{{token_aluno}}`. Sem token → `401`.
+
+O arquivo sobe antes de salvar o formulário: abra a sessão, envie o conteúdo à `url_upload` e confirme. Com `DRIVE_BACKEND=desligado`, as rotas que falam com o Drive respondem `503`. Para testar de verdade, configure o [Google Drive](google_drive.md).
+
+### POST `{{base_url}}/arquivos/sessao`
+
+**Caminho feliz** → `201`. O campo `tamanho` é em bytes, até 5242880 (5 MB).
+
+```json
+{
+  "nome": "apostila.pdf",
+  "tipo_mime": "application/pdf",
+  "tamanho": 1048576
+}
+```
+
+**Erro: tipo não aceito** → `422`
+
+```json
+{
+  "nome": "pagina.html",
+  "tipo_mime": "text/html",
+  "tamanho": 100
+}
+```
+
+**Erro: acima de 5 MB** → `422`
+
+```json
+{
+  "nome": "apostila.pdf",
+  "tipo_mime": "application/pdf",
+  "tamanho": 5242881
+}
+```
+
+**Erro: sem o tamanho** → `422`
+
+```json
+{
+  "nome": "apostila.pdf",
+  "tipo_mime": "application/pdf"
+}
+```
+
+- Erro: Drive desligado ou fora do ar → `503`.
+- Erro: 10 arquivos enviados e ainda não salvos → `409`.
+
+### Enviar o conteúdo
+
+`PUT` na `url_upload` devolvida, com o arquivo no corpo (*Body → binary*) e o mesmo `Content-Type` da sessão, sem o token da API. A resposta do Google traz o `id`.
+
+### POST `{{base_url}}/arquivos/{arquivo_id}/confirmar`
+
+**Caminho feliz** → `200`. Repetir a chamada também responde `200`.
+
+```json
+{
+  "drive_file_id": "1AbCdEfGhIjKlMnOp"
+}
+```
+
+**Erro: arquivo que não existe no Drive ou é de outra sessão** → `422`
+
+```json
+{
+  "drive_file_id": "naoexiste"
+}
+```
+
+**Erro: id com caracteres inválidos** → `422`
+
+```json
+{
+  "drive_file_id": "id/invalido"
+}
+```
+
+- Erro: arquivo de outro usuário ou inexistente → `404`.
+- Erro: Drive fora do ar → `503`.
+
+### DELETE `{{base_url}}/arquivos/{arquivo_id}`
+
+- Caminho feliz: `/arquivos/620` → `200`.
+- Erro: o mesmo de novo, já descartado → `404`.
+- Erro: arquivo já salvo em uma atividade ou entrega → `409`.
+
+---
+
+## Atividades (professor)
+
+Use `{{token_professor}}`. Nos exemplos, `397` é uma atividade e `620` um arquivo confirmado.
+
+### POST `{{base_url}}/atividades`
+
+**Caminho feliz: alunos e grupos escolhidos, com anexo** → `201`
+
+```json
+{
+  "titulo": "Redação",
+  "descricao": "Escreva **30 linhas**.",
+  "liberar_em": "2026-11-03T08:00:00-03:00",
+  "vence_em": "2026-11-20T23:59:00-03:00",
+  "permite_envio_arquivo": true,
+  "aluno_ids": [866],
+  "grupo_ids": [131],
+  "arquivo_ids": [620]
+}
+```
+
+**Caminho feliz: todos os alunos** → `201`
+
+```json
+{
+  "titulo": "Redação",
+  "descricao": "Escreva 30 linhas.",
+  "liberar_em": "2026-11-03T08:00:00-03:00",
+  "vence_em": "2026-11-20T23:59:00-03:00",
+  "todos_alunos": true
+}
+```
+
+**Erro: sem destinatário** → `422`
+
+```json
+{
+  "titulo": "Redação",
+  "descricao": "Escreva 30 linhas.",
+  "liberar_em": "2026-11-03T08:00:00-03:00",
+  "vence_em": "2026-11-20T23:59:00-03:00"
+}
+```
+
+**Erro: todos os alunos junto com alunos avulsos** → `422`
+
+```json
+{
+  "titulo": "Redação",
+  "descricao": "Escreva 30 linhas.",
+  "liberar_em": "2026-11-03T08:00:00-03:00",
+  "vence_em": "2026-11-20T23:59:00-03:00",
+  "todos_alunos": true,
+  "aluno_ids": [866]
+}
+```
+
+**Erro: vencimento antes da liberação ou no passado** → `422`
+
+```json
+{
+  "titulo": "Redação",
+  "descricao": "Escreva 30 linhas.",
+  "liberar_em": "2026-11-03T08:00:00-03:00",
+  "vence_em": "2026-11-01T08:00:00-03:00",
+  "todos_alunos": true
+}
+```
+
+**Erro: data sem fuso** → `422`
+
+```json
+{
+  "titulo": "Redação",
+  "descricao": "Escreva 30 linhas.",
+  "liberar_em": "2026-11-03T08:00:00-03:00",
+  "vence_em": "2026-11-20T23:59:00",
+  "todos_alunos": true
+}
+```
+
+**Erro: sem as datas** → `422`
+
+```json
+{
+  "titulo": "Redação",
+  "descricao": "Escreva 30 linhas.",
+  "todos_alunos": true
+}
+```
+
+**Erro: arquivo não confirmado, de outro usuário ou já usado** → `422`
+
+```json
+{
+  "titulo": "Redação",
+  "descricao": "Escreva 30 linhas.",
+  "liberar_em": "2026-11-03T08:00:00-03:00",
+  "vence_em": "2026-11-20T23:59:00-03:00",
+  "todos_alunos": true,
+  "arquivo_ids": [999999]
+}
+```
+
+**Erro: aluno inválido** → `422`
+
+```json
+{
+  "titulo": "Redação",
+  "descricao": "Escreva 30 linhas.",
+  "liberar_em": "2026-11-03T08:00:00-03:00",
+  "vence_em": "2026-11-20T23:59:00-03:00",
+  "aluno_ids": [999999]
+}
+```
+
+### GET `{{base_url}}/atividades?pagina=1&tamanho=20`
+
+- Caminho feliz: `?pagina=1&tamanho=20` ou `?situacao=proximas` (`proximas` ou `vencidas`) → `200`.
+- Erro: `?situacao=x` → `422`.
+- Erro: `?pagina=0` → `422`.
+
+### GET `{{base_url}}/atividades/entregas?pagina=1&tamanho=20`
+
+- Caminho feliz: `?pagina=1&tamanho=20` ou `?situacao=entregues` (`proximas`, `vencidas` ou `entregues`) → `200`.
+- Erro: `?situacao=x` → `422`.
+
+### GET `{{base_url}}/atividades/{atividade_id}`
+
+- Caminho feliz: `/atividades/397` → `200`.
+- Erro: atividade de outro professor, inexistente ou excluída, como `/atividades/999999` → `404`.
+- Erro: id inválido, como `/atividades/abc` → `422`.
+
+### PATCH `{{base_url}}/atividades/{atividade_id}`
+
+**Caminho feliz: título e vencimento** → `200`
+
+```json
+{
+  "titulo": "Redação 2",
+  "vence_em": "2026-11-25T23:59:00-03:00"
+}
+```
+
+**Erro: corpo vazio** → `422`
+
+```json
+{}
+```
+
+**Erro: campo como `null`** → `422`
+
+```json
+{
+  "titulo": null
+}
+```
+
+**Erro: vencimento antes da liberação já salva** → `422`
+
+```json
+{
+  "vence_em": "2026-11-01T08:00:00-03:00"
+}
+```
+
+**Erro: deixa a atividade sem destinatário** → `422`
+
+```json
+{
+  "aluno_ids": [],
+  "grupo_ids": []
+}
+```
+
+### DELETE `{{base_url}}/atividades/{atividade_id}`
+
+- Caminho feliz: `/atividades/397` → `200`.
+- Erro: o mesmo id de novo, já excluído → `404`.
+
+### GET `{{base_url}}/atividades/{atividade_id}/entregas/{aluno_id}`
+
+- Caminho feliz: `/atividades/397/entregas/866` → `200`.
+- Erro: aluno que ainda não entregou → `404`.
+
+---
+
+## Minhas atividades (aluno)
+
+Use `{{token_aluno}}`. Com o token da professora, a resposta é `403`.
+
+### GET `{{base_url}}/minhas-atividades?pagina=1&tamanho=20`
+
+- Caminho feliz: `?pagina=1&tamanho=20` ou `?situacao=realizadas` (`proximas`, `vencidas` ou `realizadas`) → `200`.
+- Erro: `?situacao=x` → `422`.
+
+### GET `{{base_url}}/minhas-atividades/{atividade_id}`
+
+- Caminho feliz: `/minhas-atividades/397` → `200`.
+- Erro: atividade ainda não liberada ou de que o aluno não é destinatário → `404`.
+
+### PUT `{{base_url}}/minhas-atividades/{atividade_id}/entrega`
+
+**Caminho feliz: com arquivo** → `200`. Depois do vencimento, a primeira entrega também responde `200`, com `status` igual a `entregue_com_atraso`.
+
+```json
+{
+  "resposta": "Minha redação",
+  "arquivo_ids": [623]
+}
+```
+
+**Caminho feliz: edita o texto e mantém os arquivos** → `200`
+
+```json
+{
+  "resposta": "Corrigida"
+}
+```
+
+**Erro: resposta vazia** → `422`
+
+```json
+{
+  "resposta": "   "
+}
+```
+
+**Erro: sem a resposta** → `422`
+
+```json
+{}
+```
+
+**Erro: arquivo inválido** → `422`
+
+```json
+{
+  "resposta": "Minha redação",
+  "arquivo_ids": [999999]
+}
+```
+
+**Erro: arquivo em uma atividade com o envio desligado** → `422`. O mesmo corpo do primeiro exemplo.
+
+- Erro: editar depois do vencimento → `409`.
+- Erro: atividade de que o aluno não é destinatário → `404`.
+
+---
+
 ## Dispositivos (push)
 
 Vale para os dois tipos de usuário: use `{{token_aluno}}` ou `{{token_professor}}`. Sem token → `401`.
