@@ -1,5 +1,12 @@
+import pytest
+
+from src.core.security import hash_senha
+from src.models.professor import Professor
 from src.models.usuario import TipoUsuario, Usuario
+from src.services import usuario_service
 from tests.conftest import cabecalho, nascido_ha
+
+CNPJ = "11222333000181"
 
 NOVO_ALUNO = {"nome_completo": "  João   da Silva ", "email": "Joao@Exemplo.com"}
 
@@ -88,5 +95,65 @@ def test_falha_no_email_desfaz_o_cadastro(client, professor, enviador, sessao):
     enviador.falhar = False
     resposta = client.post(
         "/v1/usuarios/alunos", json=NOVO_ALUNO, headers=cabecalho(professor)
+    )
+    assert resposta.status_code == 201
+
+
+def _novo_professor(sessao, email="nova@exemplo.com", **campos):
+    return usuario_service.criar_professor(
+        sessao,
+        nome_completo="Nova Professora",
+        email=email,
+        senha_hash=hash_senha("Senha-Nova-1!"),
+        **campos,
+    )
+
+
+def test_criar_professor_grava_o_usuario_e_os_dados_de_professor(sessao):
+    usuario = _novo_professor(sessao, cnpj=CNPJ, chave_pix="pix@exemplo.com")
+    sessao.commit()
+
+    assert usuario.tipo == TipoUsuario.PROFESSOR
+    dados = sessao.get(Professor, usuario.id)
+    assert (dados.cnpj, dados.chave_pix) == (CNPJ, "pix@exemplo.com")
+
+
+def test_criar_professor_sem_cnpj_nem_chave_pix(sessao):
+    primeiro = _novo_professor(sessao)
+    segundo = _novo_professor(sessao, email="outra@exemplo.com")
+    sessao.commit()
+
+    for usuario in (primeiro, segundo):
+        dados = sessao.get(Professor, usuario.id)
+        assert (dados.cnpj, dados.chave_pix) == (None, None)
+
+
+@pytest.mark.parametrize(
+    ("campos", "erro"),
+    [
+        ({"cnpj": CNPJ}, usuario_service.CnpjJaCadastrado),
+        ({"chave_pix": "pix@exemplo.com"}, usuario_service.ChavePixJaCadastrada),
+    ],
+)
+def test_criar_professor_recusa_cnpj_e_chave_pix_repetidos(sessao, campos, erro):
+    _novo_professor(sessao, cnpj=CNPJ, chave_pix="pix@exemplo.com")
+    sessao.commit()
+
+    with pytest.raises(erro):
+        _novo_professor(sessao, email="outra@exemplo.com", **campos)
+    # A recusa vem antes de o usuário ser criado.
+    assert sessao.query(Usuario).filter_by(email="outra@exemplo.com").first() is None
+
+
+def test_criar_professor_com_email_repetido(sessao, professor):
+    with pytest.raises(usuario_service.EmailJaCadastrado):
+        _novo_professor(sessao, email=professor.email)
+
+
+def test_professor_criado_pelo_service_cria_grupo(client, sessao):
+    usuario = _novo_professor(sessao)
+    sessao.commit()
+    resposta = client.post(
+        "/v1/grupos", json={"titulo": "Turma A"}, headers=cabecalho(usuario)
     )
     assert resposta.status_code == 201

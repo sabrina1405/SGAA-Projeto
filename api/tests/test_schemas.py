@@ -1,7 +1,7 @@
 from datetime import date
 
 import pytest
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from src.schemas.aluno import (
     PerfilAlunoAtualizar,
@@ -9,6 +9,7 @@ from src.schemas.aluno import (
     calcular_idade,
 )
 from src.schemas.auth import LoginEntrada, RedefinirSenhaEntrada
+from src.schemas.tipos import ChavePix, Cnpj
 from src.schemas.usuario import AlunoCriar
 from tests.conftest import nascido_ha
 
@@ -189,3 +190,76 @@ def test_edicao_de_perfil_guarda_so_o_que_foi_enviado():
 def test_edicao_de_perfil_invalida(campos):
     with pytest.raises(ValidationError):
         PerfilAlunoAtualizar(**campos)
+
+
+@pytest.mark.parametrize(
+    ("entrada", "guardado"),
+    [
+        ("11.222.333/0001-81", "11222333000181"),
+        ("11222333000181", "11222333000181"),
+        ("12.ABC.345/01DE-35", "12ABC34501DE35"),
+        ("12.abc.345/01de-35", "12ABC34501DE35"),
+    ],
+)
+def test_cnpj_aceita_mascara_e_formato_alfanumerico(entrada, guardado):
+    assert TypeAdapter(Cnpj).validate_python(entrada) == guardado
+
+
+@pytest.mark.parametrize(
+    "cnpj",
+    [
+        "11222333000180",
+        "12ABC34501DE36",
+        "00000000000000",
+        "1122233300018",
+        "112223330001811",
+        "11222333000A81",
+        "",
+    ],
+)
+def test_cnpj_invalido(cnpj):
+    with pytest.raises(ValidationError):
+        TypeAdapter(Cnpj).validate_python(cnpj)
+
+
+@pytest.mark.parametrize(
+    ("entrada", "guardada"),
+    [
+        ("529.982.247-25", "52998224725"),
+        ("11.222.333/0001-81", "11222333000181"),
+        ("  Maria.Silva@Exemplo.COM ", "maria.silva@exemplo.com"),
+        ("+55 (11) 91234-5678", "+5511912345678"),
+        ("+551134567890", "+551134567890"),
+        (
+            "123E4567-E89B-12D3-A456-426614174000",
+            "123e4567-e89b-12d3-a456-426614174000",
+        ),
+    ],
+)
+def test_chave_pix_aceita_todos_os_tipos(entrada, guardada):
+    assert TypeAdapter(ChavePix).validate_python(entrada) == guardada
+
+
+@pytest.mark.parametrize(
+    "chave",
+    [
+        "",
+        "qualquer coisa",
+        "12345678900",
+        "11912345678",
+        "+5501912345678",
+        "+1 202 555 0100",
+        "sem-dominio@",
+        "a" * 70 + "@exemplo.com",
+        "123e4567-e89b-12d3-a456",
+    ],
+)
+def test_chave_pix_invalida(chave):
+    with pytest.raises(ValidationError):
+        TypeAdapter(ChavePix).validate_python(chave)
+
+
+def test_chave_pix_de_email_cabe_na_coluna():
+    chave = "a" * 65 + "@exemplo.com"
+    assert len(chave) == 77
+    assert TypeAdapter(ChavePix).validate_python(chave) == chave

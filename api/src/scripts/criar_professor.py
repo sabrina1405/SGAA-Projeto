@@ -11,9 +11,13 @@ from sqlalchemy.orm import Session
 from src.core.config import obter_config
 from src.core.database import obter_engine
 from src.core.security import hash_senha
-from src.models.usuario import TipoUsuario
-from src.schemas.tipos import Email, NomeCompleto, NovaSenha
-from src.services.usuario_service import EmailJaCadastrado, criar_usuario
+from src.schemas.tipos import ChavePix, Cnpj, Email, NomeCompleto, NovaSenha
+from src.services.usuario_service import (
+    ChavePixJaCadastrada,
+    CnpjJaCadastrado,
+    EmailJaCadastrado,
+    criar_professor,
+)
 
 
 def _normalizar_url(url: str) -> str | None:
@@ -56,6 +60,12 @@ def _escolher_banco() -> bool:
     return True
 
 
+def _opcional(tipo: object, rotulo: str) -> str | None:
+    """Lê um campo que pode ficar em branco. Levanta ValidationError."""
+    valor = input(f"{rotulo} (opcional, Enter para pular): ").strip()
+    return TypeAdapter(tipo).validate_python(valor) if valor else None
+
+
 def main() -> int:
     if not _escolher_banco():
         return 1
@@ -64,6 +74,10 @@ def main() -> int:
             input("Nome completo: ")
         )
         email = TypeAdapter(Email).validate_python(input("E-mail: "))
+        cnpj = _opcional(Cnpj, "CNPJ")
+        chave_pix = _opcional(
+            ChavePix, "Chave Pix: CPF, CNPJ, e-mail, telefone com +55 ou aleatória"
+        )
         senha = TypeAdapter(NovaSenha).validate_python(getpass("Senha: "))
     except ValidationError as erro:
         print("Dado inválido: " + "; ".join(item["msg"] for item in erro.errors()))
@@ -74,15 +88,22 @@ def main() -> int:
 
     with Session(obter_engine()) as sessao:
         try:
-            usuario = criar_usuario(
+            usuario = criar_professor(
                 sessao,
                 nome_completo=nome_completo,
                 email=email,
-                tipo=TipoUsuario.PROFESSOR,
                 senha_hash=hash_senha(senha.get_secret_value()),
+                cnpj=cnpj,
+                chave_pix=chave_pix,
             )
         except EmailJaCadastrado:
             print("Já existe um usuário com esse e-mail.")
+            return 1
+        except CnpjJaCadastrado:
+            print("Já existe um professor com esse CNPJ.")
+            return 1
+        except ChavePixJaCadastrada:
+            print("Já existe um professor com essa chave Pix.")
             return 1
         sessao.commit()
         print(f"Professor(a) criado(a) com id {usuario.id}.")

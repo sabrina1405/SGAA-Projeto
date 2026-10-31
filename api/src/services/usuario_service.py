@@ -3,13 +3,14 @@ import unicodedata
 from collections.abc import Sequence
 from datetime import date, timedelta
 
-from sqlalchemy import Row, String, func, or_, select
+from sqlalchemy import Row, Select, String, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.core.config import obter_config
 from src.core.email import EnviadorEmail
 from src.models.aluno import Aluno
+from src.models.professor import Professor
 from src.models.usuario import TipoUsuario, Usuario
 from src.services.auth_service import definir_senha, emitir_codigo
 
@@ -21,6 +22,14 @@ class EmailJaCadastrado(Exception):
 
 
 class CpfJaCadastrado(Exception):
+    pass
+
+
+class CnpjJaCadastrado(Exception):
+    pass
+
+
+class ChavePixJaCadastrada(Exception):
     pass
 
 
@@ -68,6 +77,40 @@ def criar_usuario(
     except IntegrityError as erro:
         sessao.rollback()
         raise EmailJaCadastrado from erro
+    return usuario
+
+
+def criar_professor(
+    sessao: Session,
+    *,
+    nome_completo: str,
+    email: str,
+    senha_hash: str,
+    cnpj: str | None = None,
+    chave_pix: str | None = None,
+) -> Usuario:
+    """Insere o usuário e os dados de professor, sem fazer commit.
+
+    Levanta EmailJaCadastrado, CnpjJaCadastrado e ChavePixJaCadastrada.
+    """
+    if cnpj is not None and sessao.scalar(
+        select(Professor.usuario_id).where(Professor.cnpj == cnpj)
+    ):
+        raise CnpjJaCadastrado
+    if chave_pix is not None and sessao.scalar(
+        select(Professor.usuario_id).where(Professor.chave_pix == chave_pix)
+    ):
+        raise ChavePixJaCadastrada
+
+    usuario = criar_usuario(
+        sessao,
+        nome_completo=nome_completo,
+        email=email,
+        tipo=TipoUsuario.PROFESSOR,
+        senha_hash=senha_hash,
+    )
+    sessao.add(Professor(usuario_id=usuario.id, cnpj=cnpj, chave_pix=chave_pix))
+    sessao.flush()
     return usuario
 
 
@@ -160,15 +203,13 @@ def _sem_acentos(texto: str) -> str:
     )
 
 
-def listar_alunos(
-    sessao: Session, *, pagina: int, tamanho: int, busca: str | None = None
-) -> tuple[Sequence[Row], int]:
-    """Página de alunos que concluíram o primeiro acesso, e o total sem paginar.
+# Ordem alfabética sem considerar maiúsculas nem acentos, estável entre páginas.
+ORDEM_DOS_ALUNOS = (func.lower(func.unaccent(Usuario.nome_completo)), Usuario.id)
 
-    `busca` casa com trecho do nome ou do e-mail, sem diferenciar maiúsculas
-    nem acentos.
-    """
-    consulta = (
+
+def consulta_alunos() -> Select:
+    """Alunos ativos que concluíram o primeiro acesso, com o telefone de contato."""
+    return (
         select(
             Usuario.id,
             Usuario.nome_completo,
@@ -182,6 +223,17 @@ def listar_alunos(
             Usuario.senha.is_not(None),
         )
     )
+
+
+def listar_alunos(
+    sessao: Session, *, pagina: int, tamanho: int, busca: str | None = None
+) -> tuple[Sequence[Row], int]:
+    """Página de alunos que concluíram o primeiro acesso, e o total sem paginar.
+
+    `busca` casa com trecho do nome ou do e-mail, sem diferenciar maiúsculas
+    nem acentos.
+    """
+    consulta = consulta_alunos()
     if busca:
         # O termo vai como literal, sem acentos, para o autoescape tratar % e _.
         termo = _sem_acentos(busca)
@@ -198,7 +250,7 @@ def listar_alunos(
 
     total = sessao.scalar(select(func.count()).select_from(consulta.subquery()))
     itens = sessao.execute(
-        consulta.order_by(func.lower(func.unaccent(Usuario.nome_completo)), Usuario.id)
+        consulta.order_by(*ORDEM_DOS_ALUNOS)
         .limit(tamanho)
         .offset((pagina - 1) * tamanho)
     ).all()

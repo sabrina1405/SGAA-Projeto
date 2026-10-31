@@ -21,7 +21,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
-Banco: revisão `0003` do Alembic.
+Banco: revisão `0005` do Alembic.
 
 ### Adicionado
 
@@ -37,11 +37,14 @@ Banco: revisão `0003` do Alembic.
 - Perfil do próprio aluno em `GET /v1/auth/me/perfil` e edição em `PATCH /v1/auth/me/perfil`: nome, telefone e dados do responsável. E-mail, CPF do aluno e data de nascimento não são editáveis.
 - Modelos e migrações de `usuario`, `codigo_verificacao` (`0001`) e `aluno` (`0002`), com campos de auditoria e soft delete.
 - Migração `0003`, que habilita a extensão `unaccent` do PostgreSQL, usada na busca de alunos.
+- Grupos de alunos para a professora em `/v1/grupos`: criar (só o título é obrigatório), listar, detalhar, editar e excluir. Os alunos entram na criação ou depois, em `POST /v1/grupos/{id}/alunos`, e saem em `DELETE /v1/grupos/{id}/alunos/{aluno_id}`. Um aluno pode estar em vários grupos.
+- Tabela `professor` (migração `0004`), com CNPJ e chave Pix opcionais. As contas de professor que já existem ganham a linha correspondente na própria migração.
+- Tabelas `grupo` e `grupo_aluno` (migração `0005`).
 - Envio de e-mail com backend `console` (apenas loga) ou `smtp`.
-- Script de criação da conta da professora: `python -m src.scripts.criar_professor`.
+- Script de criação da conta da professora: `python -m src.scripts.criar_professor`. Pergunta também o CNPJ (numérico ou alfanumérico) e a chave Pix, ambos opcionais.
 - Script `aplicar_migracoes.sh`, para aplicar as migrações em produção ou homologação.
 - Observabilidade com o Logfire, ligada pela variável `LOGFIRE_TOKEN`: requisições, consultas SQL, exceções e logs, sem enviar os dados recebidos nas rotas.
-- Testes automatizados de autenticação, primeiro acesso, usuários, alunos, perfil e schemas.
+- Testes automatizados de autenticação, primeiro acesso, usuários, alunos, perfil, grupos e schemas.
 - Documentação: guia de migrações com Alembic, variáveis de ambiente e comandos úteis.
 
 ### Alterado

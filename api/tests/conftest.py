@@ -22,6 +22,7 @@ from src.core.email import obter_enviador_email
 from src.core.security import criar_token, hash_senha
 from src.main import app
 from src.models.aluno import Aluno
+from src.models.professor import Professor
 from src.models.usuario import TipoUsuario, Usuario
 from src.schemas.aluno import MAIORIDADE, hoje
 
@@ -92,6 +93,9 @@ def criar_usuario(sessao):
             senha=hash_senha(senha) if senha else None,
         )
         sessao.add(usuario)
+        sessao.flush()
+        if tipo == TipoUsuario.PROFESSOR:
+            sessao.add(Professor(usuario_id=usuario.id))
         sessao.commit()
         return usuario
 
@@ -101,6 +105,11 @@ def criar_usuario(sessao):
 @pytest.fixture
 def professor(criar_usuario):
     return criar_usuario("professora@exemplo.com", TipoUsuario.PROFESSOR)
+
+
+@pytest.fixture
+def outro_professor(criar_usuario):
+    return criar_usuario("outra-professora@exemplo.com", TipoUsuario.PROFESSOR)
 
 
 @pytest.fixture
