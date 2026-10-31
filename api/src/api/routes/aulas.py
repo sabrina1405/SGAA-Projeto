@@ -247,14 +247,15 @@ def cancelar_aula(
     """Os alunos recebem um push. Com `repor`, cada aluno fica com uma reposição
     pendente."""
     try:
-        aula = aula_service.cancelar_aula(
+        aula, notificacao_id = aula_service.cancelar_aula(
             sessao, professor, aula_id, escopo, **dados.model_dump()
         )
     except ERROS_DA_AULA as erro:
         raise _traduzir(erro) from None
-    tarefas.add_task(
-        notificacao_service.processar_pendentes_sem_falhar, sessao, enviador
-    )
+    if notificacao_id is not None:
+        tarefas.add_task(
+            notificacao_service.enviar_sem_falhar, sessao, enviador, notificacao_id
+        )
     return Resposta(mensagem="Aula cancelada", dados=_dados_aula(sessao, aula))
 
 

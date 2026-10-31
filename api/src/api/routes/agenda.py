@@ -70,7 +70,9 @@ def cancelar_participacao(
 ) -> Resposta[AgendaItem]:
     """O aluno sai da aula e o professor recebe um push para marcar a reposição."""
     try:
-        item = aula_service.cancelar_participacao(sessao, aluno, aula_id, dados.motivo)
+        item, notificacao_id = aula_service.cancelar_participacao(
+            sessao, aluno, aula_id, dados.motivo
+        )
     except aula_service.AulaNaoEncontrada:
         raise _aula_nao_encontrada() from None
     except aula_service.OperacaoNaoPermitida as erro:
@@ -78,6 +80,6 @@ def cancelar_participacao(
             status_code=status.HTTP_409_CONFLICT, detail=erro.mensagem
         ) from None
     tarefas.add_task(
-        notificacao_service.processar_pendentes_sem_falhar, sessao, enviador
+        notificacao_service.enviar_sem_falhar, sessao, enviador, notificacao_id
     )
     return Resposta(mensagem="Aula cancelada", dados=AgendaItem.model_validate(item))

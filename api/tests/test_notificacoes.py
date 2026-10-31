@@ -3,7 +3,7 @@ from datetime import timedelta
 import pytest
 from sqlalchemy import func, select
 
-from src.core.push import Recibo
+from src.core.push import FalhaPush, Recibo
 from src.core.security import agora
 from src.models.notificacao import Dispositivo, EnvioPush, Notificacao, StatusEnvio
 from src.schemas.aluno import hoje
@@ -140,6 +140,53 @@ def test_falha_no_envio_imediato_nao_afeta_a_criacao(
     assert notificacao.processada_em is None
     assert notificacao.tentativas == 1
     assert notificacao.enviar_em > agora()
+
+
+def test_envio_imediato_nao_leva_o_resto_da_fila(
+    client, professor, aluno_maior, enviador_push, sessao, monkeypatch
+):
+    _registrar(client, aluno_maior)
+    data = hoje() + timedelta(days=1)
+    atrasado = _recado(client, professor, data_inicio=data.isoformat())
+    _avancar_ate_o_aviso(monkeypatch, data)
+    novo = _recado(client, professor)
+
+    assert len(enviador_push.mensagens) == 1
+    assert enviador_push.mensagens[0].dados["recado_id"] == novo["id"]
+    assert _notificacao(sessao, atrasado).processada_em is None
+    assert notificacao_service.processar_pendentes(sessao, enviador_push) == 1
+    assert len(enviador_push.mensagens) == 2
+
+
+def test_falha_de_leitura_nao_repete_os_lotes_ja_enviados(
+    client, professor, aluno_maior, enviador_push, sessao, monkeypatch
+):
+    """O Expo aceita o primeiro lote e a conexão cai no segundo."""
+    monkeypatch.setattr(notificacao_service, "MENSAGENS_POR_ENVIO", 1)
+    _registrar(client, aluno_maior, "a")
+    _registrar(client, aluno_maior, "b")
+    enviar_original = enviador_push.enviar
+    chamadas = []
+
+    def enviar(mensagens):
+        chamadas.append(mensagens)
+        if len(chamadas) == 2:
+            raise FalhaPush("conexão caiu ao ler a resposta")
+        return enviar_original(mensagens)
+
+    monkeypatch.setattr(enviador_push, "enviar", enviar)
+    recado = _recado(client, professor)
+
+    assert len(_envios(sessao)) == 1
+    assert _notificacao(sessao, recado).tentativas == 1
+
+    monkeypatch.setattr(enviador_push, "enviar", enviar_original)
+    _avancar(monkeypatch, minutos=6)
+    assert notificacao_service.processar_pendentes(sessao, enviador_push) == 1
+    assert enviador_push.tokens() == [
+        _token(aluno_maior, "a"),
+        _token(aluno_maior, "b"),
+    ]
 
 
 # --- tarefa agendada ---

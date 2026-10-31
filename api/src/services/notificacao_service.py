@@ -67,9 +67,13 @@ def _resolvedores() -> dict[TipoNotificacao, Resolvedor]:
 
 def agendar(
     sessao: Session, tipo: TipoNotificacao, referencia_id: int, enviar_em: datetime
-) -> None:
-    """Não faz commit: entra na transação da feature."""
-    sessao.add(Notificacao(tipo=tipo, referencia_id=referencia_id, enviar_em=enviar_em))
+) -> Notificacao:
+    """Não faz commit: entra na transação da feature. O id existe depois do commit."""
+    notificacao = Notificacao(
+        tipo=tipo, referencia_id=referencia_id, enviar_em=enviar_em
+    )
+    sessao.add(notificacao)
+    return notificacao
 
 
 def reagendar(
@@ -103,18 +107,21 @@ def cancelar_pendentes(
     )
 
 
-def _proxima_pendente(sessao: Session) -> Notificacao | None:
+def _proxima_pendente(
+    sessao: Session, notificacao_id: int | None = None
+) -> Notificacao | None:
     # SKIP LOCKED: a tarefa agendada e o envio logo após a requisição podem
     # rodar ao mesmo tempo sem mandar a mesma notificação duas vezes.
+    consulta = select(Notificacao).where(
+        Notificacao.processada_em.is_(None),
+        Notificacao.deletado_em.is_(None),
+        Notificacao.enviar_em <= agora(),
+        Notificacao.tentativas < MAXIMO_TENTATIVAS,
+    )
+    if notificacao_id is not None:
+        consulta = consulta.where(Notificacao.id == notificacao_id)
     return sessao.scalar(
-        select(Notificacao)
-        .where(
-            Notificacao.processada_em.is_(None),
-            Notificacao.deletado_em.is_(None),
-            Notificacao.enviar_em <= agora(),
-            Notificacao.tentativas < MAXIMO_TENTATIVAS,
-        )
-        .order_by(Notificacao.enviar_em, Notificacao.id)
+        consulta.order_by(Notificacao.enviar_em, Notificacao.id)
         .limit(1)
         .with_for_update(skip_locked=True)
     )
@@ -184,48 +191,62 @@ def _proxima_tentativa(tentativas: int) -> datetime:
     return agora() + INTERVALO_ENTRE_TENTATIVAS * tentativas
 
 
+def _processar(
+    sessao: Session, enviador: EnviadorPush, notificacao: Notificacao
+) -> bool:
+    """Envia em uma transação. Devolve se saiu da fila; a que falhou volta para
+    uma nova tentativa."""
+    try:
+        _enviar(sessao, enviador, notificacao)
+    except FalhaPush:
+        # Os lotes que já saíram ficam registrados.
+        logger.exception("Falha ao enviar a notificação %s", notificacao.id)
+        notificacao.tentativas += 1
+        notificacao.enviar_em = _proxima_tentativa(notificacao.tentativas)
+        sessao.commit()
+        return False
+    except Exception:
+        # Um erro inesperado não pode travar a fila: conta como tentativa.
+        logger.exception("Erro ao processar a notificação %s", notificacao.id)
+        notificacao_id, tentativas = notificacao.id, notificacao.tentativas + 1
+        sessao.rollback()
+        sessao.execute(
+            update(Notificacao)
+            .where(Notificacao.id == notificacao_id)
+            .values(tentativas=tentativas, enviar_em=_proxima_tentativa(tentativas))
+        )
+        sessao.commit()
+        return False
+    sessao.commit()
+    return True
+
+
 def processar_pendentes(
     sessao: Session, enviador: EnviadorPush, *, limite: int = 50
 ) -> int:
     """Envia as notificações vencidas, uma por transação. Devolve quantas saíram
-    da fila; as que falharam voltam para uma nova tentativa."""
+    da fila."""
     processadas = 0
     for _ in range(limite):
         notificacao = _proxima_pendente(sessao)
         if notificacao is None:
             break
-        try:
-            _enviar(sessao, enviador, notificacao)
-        except FalhaPush:
-            # Os lotes que já saíram ficam registrados.
-            logger.exception("Falha ao enviar a notificação %s", notificacao.id)
-            notificacao.tentativas += 1
-            notificacao.enviar_em = _proxima_tentativa(notificacao.tentativas)
-            sessao.commit()
-            continue
-        except Exception:
-            # Um erro inesperado não pode travar a fila: conta como tentativa.
-            logger.exception("Erro ao processar a notificação %s", notificacao.id)
-            notificacao_id, tentativas = notificacao.id, notificacao.tentativas + 1
-            sessao.rollback()
-            sessao.execute(
-                update(Notificacao)
-                .where(Notificacao.id == notificacao_id)
-                .values(tentativas=tentativas, enviar_em=_proxima_tentativa(tentativas))
-            )
-            sessao.commit()
-            continue
-        sessao.commit()
-        processadas += 1
+        if _processar(sessao, enviador, notificacao):
+            processadas += 1
     return processadas
 
 
-def processar_pendentes_sem_falhar(sessao: Session, enviador: EnviadorPush) -> None:
-    """Envio logo após a requisição. Um erro aqui fica para a tarefa agendada."""
+def enviar_sem_falhar(
+    sessao: Session, enviador: EnviadorPush, notificacao_id: int
+) -> None:
+    """Envio logo após a requisição, só da notificação que ela criou: o resto da
+    fila é da tarefa agendada. Um erro aqui também fica para ela."""
     try:
-        processar_pendentes(sessao, enviador, limite=10)
+        notificacao = _proxima_pendente(sessao, notificacao_id)
+        if notificacao is not None:
+            _processar(sessao, enviador, notificacao)
     except Exception:
-        logger.exception("Falha no envio imediato das notificações")
+        logger.exception("Falha no envio imediato da notificação %s", notificacao_id)
         sessao.rollback()
 
 

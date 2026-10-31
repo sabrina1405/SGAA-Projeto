@@ -523,9 +523,11 @@ def cancelar_aula(
     *,
     motivo: str | None = None,
     repor: bool = False,
-) -> Aula:
+) -> tuple[Aula, int | None]:
     """Cancela a aula e, conforme o escopo, as seguintes da série. Os alunos
     recebem um aviso só, mesmo quando várias aulas são canceladas.
+
+    Devolve a aula e o id da notificação do aviso, que é None se a aula já começou.
 
     Levanta AulaNaoEncontrada e OperacaoNaoPermitida.
     """
@@ -545,15 +547,16 @@ def cancelar_aula(
             )
             .values(repor=True)
         )
+    notificacao = None
     if aula.inicio > agora():
         tipo = (
             TipoNotificacao.AULAS_CANCELADAS
             if len(aulas) > 1
             else TipoNotificacao.AULA_CANCELADA
         )
-        notificacao_service.agendar(sessao, tipo, aula.id, agora())
+        notificacao = notificacao_service.agendar(sessao, tipo, aula.id, agora())
     sessao.commit()
-    return aula
+    return aula, notificacao.id if notificacao is not None else None
 
 
 def adicionar_alunos(
@@ -715,8 +718,10 @@ def obter_da_agenda(sessao: Session, aluno: Usuario, aula_id: int) -> Row:
 
 def cancelar_participacao(
     sessao: Session, aluno: Usuario, aula_id: int, motivo: str | None = None
-) -> Row:
+) -> tuple[Row, int]:
     """O aluno sai da aula e fica com uma reposição pendente. O professor é avisado.
+
+    Devolve a aula na agenda e o id da notificação do aviso.
 
     Levanta AulaNaoEncontrada e OperacaoNaoPermitida.
     """
@@ -734,11 +739,11 @@ def cancelar_participacao(
     participacao.motivo_cancelamento = motivo
     participacao.cancelada_em = agora()
     participacao.repor = True
-    notificacao_service.agendar(
+    notificacao = notificacao_service.agendar(
         sessao, TipoNotificacao.PARTICIPACAO_CANCELADA, participacao.id, agora()
     )
     sessao.commit()
-    return obter_da_agenda(sessao, aluno, aula_id)
+    return obter_da_agenda(sessao, aluno, aula_id), notificacao.id
 
 
 # --- notificações push ---

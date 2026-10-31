@@ -158,8 +158,11 @@ def criar_recado(
     todos_grupos: bool = False,
     aluno_ids: Sequence[int] = (),
     grupo_ids: Sequence[int] = (),
-) -> Recado:
-    """Levanta RecadoInvalido, AlunosInvalidos e GruposInvalidos, sem criar o recado."""
+) -> tuple[Recado, int]:
+    """Devolve o recado e o id da notificação do aviso.
+
+    Levanta RecadoInvalido, AlunosInvalidos e GruposInvalidos, sem criar o recado.
+    """
     _conferir_recado(
         data_inicio=data_inicio,
         data_fim=data_fim,
@@ -181,11 +184,11 @@ def criar_recado(
     sessao.add(recado)
     sessao.flush()
     _vincular(sessao, recado, aluno_ids, grupo_ids)
-    notificacao_service.agendar(
+    notificacao = notificacao_service.agendar(
         sessao, TipoNotificacao.RECADO, recado.id, _momento_do_aviso(data_inicio)
     )
     sessao.commit()
-    return recado
+    return recado, notificacao.id
 
 
 def listar_recados(

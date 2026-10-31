@@ -130,12 +130,14 @@ def criar_recado(
     Os alunos recebem um push quando o recado entra no período de exibição.
     """
     try:
-        recado = recado_service.criar_recado(sessao, professor, **dados.model_dump())
+        recado, notificacao_id = recado_service.criar_recado(
+            sessao, professor, **dados.model_dump()
+        )
     except ERROS_DE_DESTINATARIO as erro:
         raise _destinatarios_invalidos(erro) from None
     if recado.data_inicio <= hoje():
         tarefas.add_task(
-            notificacao_service.processar_pendentes_sem_falhar, sessao, enviador
+            notificacao_service.enviar_sem_falhar, sessao, enviador, notificacao_id
         )
     return Resposta(mensagem="Recado criado", dados=_dados_recado(sessao, recado))
 

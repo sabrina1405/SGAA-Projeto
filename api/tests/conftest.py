@@ -19,7 +19,13 @@ from alembic import command
 from src.core.config import RAIZ_API
 from src.core.database import obter_engine, obter_sessao
 from src.core.email import obter_enviador_email
-from src.core.push import FalhaPush, MensagemPush, Recibo, Ticket, obter_enviador_push
+from src.core.push import (
+    FalhaPush,
+    MensagemPush,
+    Recibo,
+    Ticket,
+    obter_enviador_push_na_requisicao,
+)
 from src.core.security import criar_token, hash_senha
 from src.main import app
 from src.models.aluno import Aluno
@@ -114,7 +120,7 @@ def enviador_push():
 def client(sessao, enviador, enviador_push):
     app.dependency_overrides[obter_sessao] = lambda: sessao
     app.dependency_overrides[obter_enviador_email] = lambda: enviador
-    app.dependency_overrides[obter_enviador_push] = lambda: enviador_push
+    app.dependency_overrides[obter_enviador_push_na_requisicao] = lambda: enviador_push
     yield TestClient(app)
     app.dependency_overrides.clear()
 

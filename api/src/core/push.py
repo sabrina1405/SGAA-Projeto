@@ -3,6 +3,7 @@
 O app registra o ExpoPushToken; o Expo entrega pelo FCM (Android) e pelo APNs (iOS).
 """
 
+import http.client
 import json
 import logging
 import urllib.error
@@ -17,6 +18,9 @@ logger = logging.getLogger(__name__)
 URL_ENVIO = "https://exp.host/--/api/v2/push/send"
 URL_RECIBOS = "https://exp.host/--/api/v2/push/getReceipts"
 TIMEOUT_SEGUNDOS = 10
+# Dentro de uma requisição, a espera soma no tempo de resposta e no timeout da
+# Lambda. O que não sair a tempo fica para a tarefa agendada.
+TIMEOUT_NA_REQUISICAO_SEGUNDOS = 3
 # Limites de cada chamada da API do Expo.
 MENSAGENS_POR_ENVIO = 100
 IDS_POR_CONSULTA_DE_RECIBOS = 1000
@@ -86,6 +90,9 @@ def _erro(item: dict[str, Any]) -> str:
 
 
 class EnviadorPushExpo:
+    def __init__(self, timeout_segundos: int = TIMEOUT_SEGUNDOS) -> None:
+        self.timeout_segundos = timeout_segundos
+
     def _chamar(self, url: str, corpo: object) -> Any:
         cabecalhos = {"Accept": "application/json", "Content-Type": "application/json"}
         token = obter_config().expo_access_token
@@ -96,12 +103,13 @@ class EnviadorPushExpo:
         )
         try:
             with urllib.request.urlopen(
-                requisicao, timeout=TIMEOUT_SEGUNDOS
+                requisicao, timeout=self.timeout_segundos
             ) as resposta:
                 return json.loads(resposta.read())["data"]
         except urllib.error.HTTPError as erro:
             raise FalhaPush(f"Expo respondeu {erro.code}") from erro
-        except (urllib.error.URLError, TimeoutError, ValueError, KeyError) as erro:
+        # OSError cobre URLError, TimeoutError e queda da conexão durante a leitura.
+        except (OSError, http.client.HTTPException, ValueError, KeyError) as erro:
             raise FalhaPush(f"falha na chamada ao Expo: {erro}") from erro
 
     def enviar(self, mensagens: list[MensagemPush]) -> list[Ticket]:
@@ -146,6 +154,14 @@ class EnviadorPushExpo:
 
 
 def obter_enviador_push() -> EnviadorPush:
+    """Para a tarefa agendada."""
     if obter_config().push_backend == "expo":
         return EnviadorPushExpo()
+    return EnviadorPushConsole()
+
+
+def obter_enviador_push_na_requisicao() -> EnviadorPush:
+    """Para o envio logo após uma requisição, com menos tempo de espera."""
+    if obter_config().push_backend == "expo":
+        return EnviadorPushExpo(timeout_segundos=TIMEOUT_NA_REQUISICAO_SEGUNDOS)
     return EnviadorPushConsole()
