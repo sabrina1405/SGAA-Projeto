@@ -2,7 +2,7 @@
 
 O que a API do SGAA espera além do que o Swagger mostra: as convenções comuns a todas as rotas, a ordem das chamadas em cada fluxo e os limites dos códigos de verificação.
 
-A referência de cada rota (entrada, saída, campos e status) é o Swagger, em `/docs`, gerado a partir do código e sempre atualizado. Para acessá-lo localmente, ver [Iniciar Servidor Local](../../api/docs/primeiros_passos/iniciar_servidor_local.md).
+A referência de cada rota (entrada, saída, campos e status) é o Swagger, em `/docs`, gerado a partir do código e sempre atualizado. Ele fica disponível localmente e em homologação, mas não em produção. Para acessá-lo localmente, ver [Iniciar Servidor Local](../../api/docs/primeiros_passos/iniciar_servidor_local.md).
 
 - [Convenções](#convenções)
 - [Fluxos](#fluxos)
@@ -20,7 +20,7 @@ A referência de cada rota (entrada, saída, campos e status) é o Swagger, em `
 
 Todas as rotas da API ficam sob o prefixo `/v1`, por exemplo `POST /v1/auth/login`. Uma mudança incompatível em um recurso entra em uma versão nova (`/v2`), sem tirar a anterior do ar.
 
-Ficam fora da versão a documentação (`/docs`, `/redoc`, `/openapi.json`) e a checagem de saúde (`GET /api/health`).
+Ficam fora da versão a documentação (`/docs`, `/redoc`, `/openapi.json`, que respondem `404` em produção) e a checagem de saúde (`GET /api/health`).
 
 ### Tokens
 
@@ -276,6 +276,58 @@ Campos que o aluno pode editar:
 - **O que aparece**: as aulas em que o aluno está, inclusive as canceladas e as que ele mesmo cancelou (`participacao` igual a `cancelada`). As anotações da professora não aparecem. O período segue a mesma regra da listagem da professora.
 - **Cancelar**: só uma aula agendada que ainda não começou. A aula continua para os outros alunos, a professora recebe um push e o aluno entra na lista de reposições pendentes. Cancelar de novo, ou uma aula já cancelada ou começada, responde `409`. Aula em que o aluno não está responde `404`.
 
+### Arquivos
+
+| Rota | Resultado |
+| --- | --- |
+| `POST /v1/arquivos/sessao` | Valida e abre o envio. Devolve `arquivo_id` e `url_upload`. |
+| `POST /v1/arquivos/{id}/confirmar` | Confere o arquivo no Drive e cria o link. |
+| `DELETE /v1/arquivos/{id}` | Descarta um arquivo ainda não salvo. |
+
+- **Fluxo**: o arquivo sobe **antes** de salvar o formulário, em três passos: abrir a sessão, mandar o conteúdo com `PUT` direto à `url_upload` (a resposta do Google traz o `id`, sem passar pela API) e confirmar com esse valor em `drive_file_id`. Depois, a atividade ou a entrega recebe os ids em `arquivo_ids`. Detalhes em [Google Drive](../../api/docs/google_drive.md).
+- **Limites**: até 5 MB (`tamanho` em bytes), e até 10 arquivos enviados e não salvos por usuário (`409`). Tipos aceitos: PDF, PNG, JPEG, WebP, texto puro, Word, Excel e PowerPoint. Fora disso, `422` com `tipo` igual a `arquivo_muito_grande` ou `tipo_nao_permitido`.
+- **Confirmação**: vale o que está no Drive, e não o declarado. Arquivo fora dos limites responde `422` e é apagado. Arquivo que não existe ou é de outra sessão responde `422` com `tipo` igual a `arquivo_nao_enviado`. Repetir a confirmação é seguro: use em caso de `503` ou timeout.
+- **Dono**: cada usuário vê e altera só os próprios arquivos. Os de outro usuário respondem `404`.
+- **Link**: `url` abre o arquivo para quem tem o link, sem login. A API só o entrega a quem tem acesso à atividade.
+- **Descartar**: arquivo já salvo responde `409`; ele sai pela edição ou exclusão da atividade ou entrega.
+- **Sem vínculo**: arquivo pendente há mais de 1 hora, ou confirmado e não salvo há mais de 24 horas, é apagado.
+- **Drive indisponível**: `503`, sem gravar nada.
+
+### Atividades (professor)
+
+| Rota | Resultado |
+| --- | --- |
+| `POST /v1/atividades` | Cria a atividade e devolve seus dados, destinatários e anexos. |
+| `GET /v1/atividades` | Lista paginada, do vencimento mais próximo ao mais distante, com `total_entregas`. Filtro `situacao`: `proximas` ou `vencidas`. |
+| `GET /v1/atividades/entregas` | Lista paginada com uma linha por aluno e atividade. `status` nulo: ainda não entregou. Filtro `situacao`: `proximas`, `vencidas` ou `entregues`. |
+| `GET /v1/atividades/{id}` | Dados da atividade, destinatários e anexos. |
+| `PATCH /v1/atividades/{id}` | Altera só os campos enviados. |
+| `DELETE /v1/atividades/{id}` | Exclui a atividade. |
+| `GET /v1/atividades/{id}/entregas/{aluno_id}` | Resposta do aluno e arquivos enviados. |
+
+- **Criação**: `titulo` (até 75 caracteres), `descricao` (Markdown, até 5000), `liberar_em` e `vence_em` são obrigatórios. `permite_envio_arquivo` (padrão `false`) libera o aluno a anexar arquivos.
+- **Datas**: ISO 8601 com o fuso, como `2026-11-20T23:59:00-03:00`; sem o fuso, `422`. As respostas trazem o horário de Brasília. `vence_em` precisa ser depois de `liberar_em` e, ao criar ou mudar, estar no futuro. Do contrário, `422` com `tipo` igual a `periodo_invalido`.
+- **Destinatários**: `aluno_ids`, `grupo_ids`, `todos_alunos` e `todos_grupos`, com as mesmas regras e erros dos [recados](#recados-professor). Valem também para quem entrar depois.
+- **Anexos**: `arquivo_ids`, até 5, sem repetição. Arquivo não confirmado, de outro usuário ou já usado gera `422` com `tipo` igual a `arquivo_invalido`, e nada é gravado.
+- **Edição**: nenhum campo aceita `null`. `aluno_ids`, `grupo_ids` e `arquivo_ids`, quando enviados, substituem os atuais; o arquivo que sai deixa de abrir em até 5 minutos.
+- **Dono**: cada professor vê e altera só as próprias atividades. As de outro, inexistentes ou excluídas respondem `404`.
+- **Exclusão**: a atividade some das listas, e os arquivos dela e das entregas deixam de abrir em até 5 minutos.
+- **Entregas**: uma entrega continua aparecendo mesmo que o aluno tenha saído dos destinatários.
+
+### Minhas atividades (aluno)
+
+| Rota | Resultado |
+| --- | --- |
+| `GET /v1/minhas-atividades` | Lista paginada das atividades liberadas para o aluno, do vencimento mais próximo ao mais distante. `status` nulo: ainda não entregou. Filtro `situacao`: `proximas`, `vencidas` ou `realizadas`. |
+| `GET /v1/minhas-atividades/{id}` | Dados da atividade, anexos e a própria entrega (`entrega` nula se ainda não houver). |
+| `PUT /v1/minhas-atividades/{id}/entrega` | Cria ou edita a resposta. |
+
+- **Quem vê**: como no mural, com a atividade já liberada (`liberar_em`). Antes disso, ou sem ser destinatário, `404`. Quem entregou continua vendo, mesmo fora dos destinatários.
+- **Situação**: `realizadas` são as entregues; `proximas` e `vencidas` são as não entregues, antes e depois do vencimento.
+- **Entrega**: `resposta` é obrigatória, até 5000 caracteres. `arquivo_ids` é opcional, até 3, e só vale com `permite_envio_arquivo` ligado; do contrário, `422` com `tipo` igual a `envio_de_arquivo_desligado`.
+- **Edição**: até o vencimento. `arquivo_ids` enviado substitui os arquivos; ausente, mantém. Depois do vencimento, `409`.
+- **Atraso**: vencida, a atividade ainda aceita a primeira entrega, com `status` igual a `entregue_com_atraso`. Por isso, envie os arquivos antes e mande tudo na mesma chamada.
+
 ### Notificações push
 
 | Rota | Resultado |
@@ -292,10 +344,14 @@ Campos que o aluno pode editar:
   - Títulos: "Aula em 1 semana: {título}", "Aula amanhã: {título}" e "Aula em 30 minutos: {título}". O corpo traz o dia, o horário e a professora, como "qui, 24/09 às 15:00, com Ana".
 - **Aula cancelada**: os alunos recebem um push na hora, se a aula ainda não começou. Ao cancelar a aula e as seguintes da série, vai um aviso só ("Aulas canceladas: {título}").
 - **Aluno cancelou**: a professora recebe "{aluno} cancelou a aula", com a aula e o motivo.
+- **Atividade nova**: os destinatários recebem o push na liberação: na hora, se `liberar_em` já passou. Adiar a liberação antes do envio muda o horário. Uma atividade já avisada não avisa de novo como nova.
+- **Atividade alterada**: se já foi liberada e mudaram título, descrição, datas ou anexos. Mudar só os destinatários ou `permite_envio_arquivo` não avisa.
+- **Lembretes de atividade**: 1 semana e 1 dia antes de `vence_em`, e às 7h (horário de Brasília) do dia do vencimento, só para quem ainda não entregou. Os que cairiam antes da liberação, no passado ou depois do vencimento não são agendados. Mudar `vence_em` refaz os lembretes, e excluir a atividade cancela os avisos.
 - **`dados`**: cada push leva um objeto para o app abrir a tela certa ao tocar na notificação.
   - Recado: `{"tipo": "recado", "recado_id": 41}`.
   - Aula: `{"tipo": "aula_lembrete_semana", "aula_id": 501}`, com `tipo` igual a `aula_lembrete_semana`, `aula_lembrete_dia`, `aula_lembrete_30min`, `aula_cancelada` ou `aulas_canceladas`.
   - Aluno cancelou: `{"tipo": "participacao_cancelada", "aula_id": 501, "aluno_id": 866}`.
+  - Atividade: `{"tipo": "atividade_nova", "atividade_id": 397}`, com `tipo` igual a `atividade_nova`, `atividade_editada`, `atividade_lembrete_semana`, `atividade_lembrete_dia` ou `atividade_vence_hoje`.
 
 ---
 

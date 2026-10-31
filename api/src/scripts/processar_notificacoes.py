@@ -10,7 +10,8 @@ def main() -> None:
     resultado = executar_tarefa_agendada()
     print(
         f"Notificações enviadas: {resultado['enviadas']}. "
-        f"Recibos conferidos: {resultado['recibos_conferidos']}."
+        f"Recibos conferidos: {resultado['recibos_conferidos']}. "
+        f"Arquivos removidos: {resultado['arquivos_removidos']}."
     )
 
 

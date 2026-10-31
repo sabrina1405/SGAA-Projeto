@@ -25,6 +25,9 @@ TAMANHO_MAXIMO_CHAVE_PIX = 77
 MAXIMO_IDS_POR_CHAMADA = 100
 TAMANHO_MAXIMO_RECADO = 5000
 TAMANHO_MAXIMO_ANOTACOES = 5000
+TAMANHO_MAXIMO_TEXTO_ATIVIDADE = 5000
+MAXIMO_ANEXOS_POR_ATIVIDADE = 5
+MAXIMO_ANEXOS_POR_ENTREGA = 3
 
 
 def _remover_espacos_das_pontas(valor: object) -> object:
@@ -284,6 +287,37 @@ MotivoCancelamento = Annotated[
     str,
     AfterValidator(_normalizar_nome),
     StringConstraints(min_length=1, max_length=150),
+]
+
+TituloAtividade = Annotated[
+    str,
+    AfterValidator(_normalizar_nome),
+    StringConstraints(min_length=1, max_length=75),
+]
+# Texto em Markdown, renderizado pelo front.
+TextoAtividade = Annotated[
+    str,
+    AfterValidator(_normalizar_texto_longo),
+    StringConstraints(min_length=1, max_length=TAMANHO_MAXIMO_TEXTO_ATIVIDADE),
+]
+NomeArquivo = Annotated[
+    str,
+    AfterValidator(_normalizar_nome),
+    StringConstraints(min_length=1, max_length=150),
+]
+DriveFileId = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, pattern=r"^[A-Za-z0-9_-]{1,100}$"),
+]
+AnexosDaAtividade = Annotated[
+    list[IdBanco],
+    Field(max_length=MAXIMO_ANEXOS_POR_ATIVIDADE),
+    AfterValidator(_sem_repeticao),
+]
+AnexosDaEntrega = Annotated[
+    list[IdBanco],
+    Field(max_length=MAXIMO_ANEXOS_POR_ENTREGA),
+    AfterValidator(_sem_repeticao),
 ]
 
 # Token do Expo, como "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]".
