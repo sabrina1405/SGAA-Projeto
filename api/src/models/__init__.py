@@ -1,4 +1,5 @@
 from src.models.aluno import Aluno
+from src.models.aula import Aula, AulaAluno, AulaGrupo, StatusAula, StatusParticipacao
 from src.models.codigo_verificacao import CodigoVerificacao
 from src.models.grupo import Grupo, GrupoAluno
 from src.models.notificacao import (
@@ -14,6 +15,9 @@ from src.models.usuario import TipoUsuario, Usuario
 
 __all__ = [
     "Aluno",
+    "Aula",
+    "AulaAluno",
+    "AulaGrupo",
     "CodigoVerificacao",
     "Dispositivo",
     "EnvioPush",
@@ -25,7 +29,9 @@ __all__ = [
     "RecadoAluno",
     "RecadoGeral",
     "RecadoGrupo",
+    "StatusAula",
     "StatusEnvio",
+    "StatusParticipacao",
     "TipoNotificacao",
     "TipoUsuario",
     "Usuario",

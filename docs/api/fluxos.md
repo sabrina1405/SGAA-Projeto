@@ -235,6 +235,47 @@ Campos que o aluno pode editar:
   - o recado é para todos os grupos e o aluno está em algum grupo do professor.
 - **Grupos excluídos**: não contam. Um aluno que sai do grupo deixa de ver os recados enviados a esse grupo.
 
+### Aulas (professor)
+
+| Rota | Resultado |
+| --- | --- |
+| `POST /v1/aulas` | Cria a aula, ou todas as da série semanal, e devolve a primeira com os alunos e grupos. |
+| `GET /v1/aulas?data_inicio=&data_fim=` | Aulas que começam no período, em ordem de início, com os alunos de cada uma. Filtros opcionais: `status`, `aluno_id` e `grupo_id`. |
+| `GET /v1/aulas/{id}` | Dados da aula, com a participação de cada aluno e os grupos usados. |
+| `PATCH /v1/aulas/{id}?escopo=` | Altera só os campos enviados. |
+| `POST /v1/aulas/{id}/cancelar?escopo=` | Cancela a aula. |
+| `POST /v1/aulas/{id}/alunos?escopo=` | Adiciona os alunos de `aluno_ids` e os dos grupos de `grupo_ids`. |
+| `DELETE /v1/aulas/{id}/alunos/{aluno_id}?escopo=` | Tira o aluno da aula. |
+| `GET /v1/aulas/reposicoes-pendentes` | Lista paginada dos alunos que ficaram sem aula, da aula mais antiga à mais nova. |
+| `DELETE /v1/aulas/reposicoes-pendentes/{aula_id}/{aluno_id}` | Dispensa a reposição sem marcar aula. |
+
+- **Horário**: `inicio` e `fim` no formato ISO 8601 com o fuso, como `2026-11-05T15:00:00-03:00`. Sem o fuso, a resposta é `422`. As respostas trazem sempre o horário de Brasília.
+  - A aula precisa começar no futuro, terminar depois do início e durar no máximo 12 horas. Do contrário, `422` com `tipo` igual a `horario_invalido`.
+- **Status**: `agendada` (o app mostra como "Confirmada"), `realizada` ou `cancelada`. A aula nasce `agendada`. O `PATCH` aceita `status` `realizada`, só depois de a aula começar, e `agendada`, para desfazer. O cancelamento tem rota própria.
+- **Alunos**: `aluno_ids` e `grupo_ids` (até 100 ids cada, sem repetição). É preciso ao menos um aluno, direto ou por um grupo; do contrário, `422` com `tipo` igual a `sem_aluno`. Aluno ou grupo inválido gera `aluno_invalido` ou `grupo_invalido`, como nos recados, e nada é gravado.
+  - Os alunos do grupo entram na aula na criação. Quem entrar no grupo depois não entra nas aulas já criadas, e quem sair continua nelas.
+- **Repetição semanal**: com `repetir_semanalmente` igual a `true`, `repetir_ate` é obrigatório. São criadas aulas no mesmo dia da semana e horário, até essa data, inclusive, e por no máximo 26 semanas. As aulas da série têm o mesmo `serie_id`. `repetir_ate` sem `repetir_semanalmente`, faltando, anterior à primeira aula ou além de 26 semanas gera `422` com `tipo` igual a `repeticao_invalida`.
+- **Conflito**: uma aula que se sobrepõe a outra aula não cancelada da professora gera `409`, com a aula em conflito na mensagem. Aulas encostadas (uma termina às 16h e a outra começa às 16h) não conflitam. Numa série, todas as aulas são conferidas, e nenhuma é criada se uma conflitar.
+- **Escopo**: `esta` (padrão) ou `esta_e_seguintes`. O segundo alcança também as próximas aulas agendadas da mesma série; as canceladas e as realizadas ficam como estão. Em aula avulsa, os dois dão no mesmo.
+- **Edição**: `descricao` e `anotacoes` enviadas como `null` são apagadas; os outros campos não podem ser `null`. Mudar `inicio` ou `fim` desloca as aulas do escopo pelo mesmo tanto e reconfere o conflito. Só uma aula agendada muda de horário. Aula cancelada não pode ser editada (`409`). `status` só vale com `escopo=esta` (do contrário, `422` com `tipo` igual a `escopo_invalido`).
+- **Anotações**: notas da professora, até 5000 caracteres. O aluno não as vê.
+- **Cancelamento**: só de aula agendada; de novo, `409`. `motivo` (até 150 caracteres) é opcional e aparece para o aluno. Com `repor` igual a `true`, cada aluno da aula fica com uma reposição pendente.
+- **Reposição**: o aluno fica pendente quando cancela a participação ou quando a professora cancela com `repor`. Criar uma aula com `reposicao_de_aula_id` resolve a pendência dos alunos dessa aula que estiverem na nova. Aula de outra professora ou inexistente em `reposicao_de_aula_id` gera `422` com `tipo` igual a `aula_invalida`.
+  - Cada item da lista traz `cancelada_por` (`aluno` ou `professor`) e o motivo correspondente.
+- **Período da listagem**: `data_inicio` e `data_fim` (`AAAA-MM-DD`, horário de Brasília, inclusive) são obrigatórios e cobrem até 62 dias, o bastante para a visão mensal. Fora disso, `422` com `tipo` igual a `periodo_invalido`.
+- **Dona da aula**: cada professora vê e altera só as próprias aulas. Aula de outra professora ou inexistente responde `404`.
+
+### Agenda (aluno)
+
+| Rota | Resultado |
+| --- | --- |
+| `GET /v1/agenda?data_inicio=&data_fim=` | Aulas do aluno que começam no período, em ordem de início, com `professor_nome` e a `participacao` dele. Filtro opcional: `status`. |
+| `GET /v1/agenda/{aula_id}` | Uma aula da agenda. |
+| `POST /v1/agenda/{aula_id}/cancelar` | Cancela a participação do aluno, com `motivo` opcional. |
+
+- **O que aparece**: as aulas em que o aluno está, inclusive as canceladas e as que ele mesmo cancelou (`participacao` igual a `cancelada`). As anotações da professora não aparecem. O período segue a mesma regra da listagem da professora.
+- **Cancelar**: só uma aula agendada que ainda não começou. A aula continua para os outros alunos, a professora recebe um push e o aluno entra na lista de reposições pendentes. Cancelar de novo, ou uma aula já cancelada ou começada, responde `409`. Aula em que o aluno não está responde `404`.
+
 ### Notificações push
 
 | Rota | Resultado |
@@ -247,7 +288,14 @@ Campos que o aluno pode editar:
 - **Token inválido**: o Expo avisa quando um token deixa de valer (app desinstalado, por exemplo), e a API para de usá-lo. O app deve registrar o token a cada login, para recuperar esse caso.
 - **Recado novo**: o aluno que vê o recado no mural recebe o push quando o recado entra no período de exibição. Na hora, se `data_inicio` é hoje ou já passou; às 7h (horário de Brasília) do dia de início, se é futura. Mudar `data_inicio` antes do envio muda o horário. Editar um recado já avisado não gera outro push, e um recado excluído antes do envio não é avisado.
 - **Conteúdo**: o título é "Novo recado de {professor}" e o corpo traz o começo do texto, sem a marcação do Markdown.
-- **`dados`**: cada push leva um objeto para o app abrir a tela certa ao tocar na notificação. No recado: `{"tipo": "recado", "recado_id": 41}`.
+- **Lembretes de aula**: os alunos com participação ativa recebem push 1 semana, 1 dia e 30 minutos antes de cada aula agendada. Lembretes cujo horário já passou na criação não são agendados: uma aula marcada para daqui a 2 dias só tem os de 1 dia e de 30 minutos. Mudar o horário refaz os lembretes. Aula cancelada, ou aluno que cancelou, não recebe lembrete. A tarefa agendada roda a cada 5 minutos, então um lembrete pode chegar até 5 minutos depois do horário.
+  - Títulos: "Aula em 1 semana: {título}", "Aula amanhã: {título}" e "Aula em 30 minutos: {título}". O corpo traz o dia, o horário e a professora, como "qui, 24/09 às 15:00, com Ana".
+- **Aula cancelada**: os alunos recebem um push na hora, se a aula ainda não começou. Ao cancelar a aula e as seguintes da série, vai um aviso só ("Aulas canceladas: {título}").
+- **Aluno cancelou**: a professora recebe "{aluno} cancelou a aula", com a aula e o motivo.
+- **`dados`**: cada push leva um objeto para o app abrir a tela certa ao tocar na notificação.
+  - Recado: `{"tipo": "recado", "recado_id": 41}`.
+  - Aula: `{"tipo": "aula_lembrete_semana", "aula_id": 501}`, com `tipo` igual a `aula_lembrete_semana`, `aula_lembrete_dia`, `aula_lembrete_30min`, `aula_cancelada` ou `aulas_canceladas`.
+  - Aluno cancelou: `{"tipo": "participacao_cancelada", "aula_id": 501, "aluno_id": 866}`.
 
 ---
 

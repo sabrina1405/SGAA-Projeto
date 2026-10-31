@@ -15,7 +15,7 @@ As rotas e regras de negócio estão em [Fluxos da API](../../docs/api/fluxos.md
 Feature (ex.: criar recado) ──> grava o recado + uma linha em `notificacao` (mesma transação)
         │
         └─ se já venceu, tenta enviar logo depois da requisição
-Tarefa agendada (a cada 15 min) ──> envia as pendentes vencidas + confere os recibos do Expo
+Tarefa agendada (a cada 5 min) ──> envia as pendentes vencidas + confere os recibos do Expo
 Envio: resolvedor do tipo ──> usuários ──> dispositivos ativos ──> Expo (lotes de 100)
 ```
 
@@ -27,14 +27,17 @@ Envio: resolvedor do tipo ──> usuários ──> dispositivos ativos ──> 
 **Falhas:** Expo fora do ar, 429 ou 5xx contam como uma tentativa.
 - A próxima tentativa fica para 5, 10, 15… minutos depois.
 - Depois de 5 tentativas, a notificação é abandonada.
-- Os lotes que já saíram ficam registrados e não são repetidos.
+- Os lotes que já saíram ficam registrados e não são repetidos. Só o lote da chamada que falhou pode se repetir, porque o Expo pode tê-lo aceitado antes de a conexão cair.
 
 **Recibos (`envio_push`):** cada mensagem gera um ticket.
 - Depois de 15 minutos, a tarefa agendada consulta o recibo.
 - `DeviceNotRegistered`, no ticket ou no recibo, desativa o dispositivo.
 - O Expo guarda os recibos por 24 horas. Um envio sem recibo depois disso fica como `sem_recibo`.
 
-**Envio imediato:** na requisição que cria o recado, o envio roda como `BackgroundTasks`. Na Lambda, com o Mangum, isso acontece antes de a resposta sair, e soma o tempo da chamada ao Expo, em geral menos de 1 segundo. Uma falha ali não afeta a requisição: fica para a tarefa agendada.
+**Envio imediato:** na requisição que cria o recado ou cancela uma aula, o envio roda como `BackgroundTasks`. Na Lambda, com o Mangum, isso acontece antes de a resposta sair, e soma o tempo da chamada ao Expo, em geral menos de 1 segundo.
+- Só sai a notificação que a própria requisição criou. O resto da fila, como as novas tentativas e os lembretes, é da tarefa agendada.
+- Cada chamada ao Expo espera no máximo 3 segundos, contra 10 na tarefa agendada. Se falhar ou passar disso, a notificação fica para a tarefa agendada, e a requisição responde normalmente.
+- Uma notificação com muitos aparelhos faz uma chamada a cada 100. Com mais de 400 aparelhos e o Expo lento, a soma das esperas pode se aproximar do timeout de 15 segundos da função.
 
 ## Configuração
 
@@ -51,9 +54,10 @@ Com `LOGFIRE_TOKEN` definido, o backend `console` envia ao Logfire o token do ap
 
 - **Ponto de entrada:** `notificacao_service.executar_tarefa_agendada()`. Ela processa a fila e confere os recibos.
 - **Localmente:** `poetry run python -m src.scripts.processar_notificacoes`.
-- **Na AWS Lambda** (feito na branch do deploy):
-  - `lambda_handler.handler` desvia para a tarefa quando o evento é `{"tarefa": "processar_notificacoes"}`. Os outros eventos seguem para o Mangum.
-  - No `template.yaml`, um evento `Schedule` na função, com `rate(15 minutes)` e esse `Input`. São cerca de 2.900 invocações por mês, dentro da cota gratuita da Lambda e do EventBridge.
+- **Na AWS Lambda:** a função própria `sgaa-api-tarefa-<ambiente>` (`lambda_tarefa.handler`), separada da API, com timeout de 60 s e log group próprio. Ver [Deploy na AWS Lambda](deploy_aws_lambda.md).
+  - No `template.yaml`, um evento `Schedule` com `rate(5 minutes)`, ajustável pelo parâmetro `IntervaloTarefa`. São cerca de 8.700 invocações por mês por ambiente, menos de 1% da cota gratuita da Lambda (1 milhão de requisições por mês). A regra agendada do EventBridge não é cobrada por disparo.
+  - Duas execuções ao mesmo tempo não repetem envio: a fila usa `FOR UPDATE SKIP LOCKED`.
+  - O intervalo é de 5 minutos por causa do lembrete de 30 minutos antes da aula: ele chega com até 5 minutos de atraso. Com 15 minutos, poderia chegar só 15 minutos antes da aula.
   - Não há rota pública nem segredo extra.
 
 ## Como adicionar um tipo novo de notificação
@@ -62,7 +66,7 @@ Com `LOGFIRE_TOKEN` definido, o backend `console` envia ao Logfire o token do ap
 2. No service da feature, escreva o resolvedor `conteudo_da_notificacao(sessao, referencia_id) -> Conteudo | None`, no molde de `recado_service.conteudo_da_notificacao`. Ele devolve os ids dos usuários, o título, o corpo e os `dados` do deep link. Devolve `None` quando a notificação não vale mais.
 3. Registre o resolvedor em `_resolvedores()` (`src/services/notificacao_service.py`).
 4. Na transação da feature, chame `notificacao_service.agendar(sessao, tipo, referencia_id, enviar_em)`. Se o horário puder mudar, use `reagendar`.
-5. Para enviar logo após a requisição, adicione `notificacao_service.processar_pendentes_sem_falhar` como `BackgroundTasks` na rota.
+5. Para enviar logo após a requisição, faça o service devolver o id da notificação (`agendar` devolve a `Notificacao`; o id existe depois do commit) e adicione `notificacao_service.enviar_sem_falhar` como `BackgroundTasks` na rota.
 6. Documente o tipo e o formato de `dados` em [Fluxos da API](../../docs/api/fluxos.md#notificações-push).
 
 ## O que o app precisa fazer

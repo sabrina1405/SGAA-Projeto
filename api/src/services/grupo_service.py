@@ -22,6 +22,32 @@ class AlunoForaDoGrupo(Exception):
     pass
 
 
+class GruposInvalidos(Exception):
+    def __init__(self, ids: list[int]) -> None:
+        super().__init__(ids)
+        self.ids = ids
+
+
+def validar_grupos(
+    sessao: Session, professor: Usuario, grupo_ids: Sequence[int]
+) -> None:
+    """Levanta GruposInvalidos com os ids que não são de grupos do professor."""
+    if not grupo_ids:
+        return
+    validos = set(
+        sessao.scalars(
+            select(Grupo.id).where(
+                Grupo.id.in_(grupo_ids),
+                Grupo.professor_id == professor.id,
+                Grupo.deletado_em.is_(None),
+            )
+        )
+    )
+    invalidos = [grupo_id for grupo_id in grupo_ids if grupo_id not in validos]
+    if invalidos:
+        raise GruposInvalidos(invalidos)
+
+
 def _grupo_do_professor(sessao: Session, professor: Usuario, grupo_id: int) -> Grupo:
     grupo = sessao.get(Grupo, grupo_id)
     if (

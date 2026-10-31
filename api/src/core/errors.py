@@ -26,10 +26,12 @@ class CamposInvalidos(Exception):
     Responde `422` no mesmo formato dos erros de validação do corpo.
     """
 
-    def __init__(self, tipo: str, mensagem: str, campos: list[str]) -> None:
+    def __init__(
+        self, tipo: str, mensagem: str, campos: list[str], local: str = "body"
+    ) -> None:
         super().__init__(mensagem)
         self.erros = [
-            {"local": ["body", campo], "tipo": tipo, "mensagem": mensagem}
+            {"local": [local, campo], "tipo": tipo, "mensagem": mensagem}
             for campo in campos
         ]
 

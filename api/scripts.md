@@ -8,6 +8,12 @@ Gera o arquivo **requirements.txt** a partir do **poetry.lock**: `poetry export 
 
 **OBS**: caso o comando apresente erro, pode ser necessário instalar o plugin de export com `poetry self add poetry-plugin-export`
 
+## Deploy
+
+Publicar na AWS Lambda (exige Docker e o `api/.aws.env`; migrações novas antes, com `./aplicar_migracoes.sh`): `./deploy_lambda.sh homolog` ou `./deploy_lambda.sh prod`
+
+Guia completo: [Deploy na AWS Lambda](docs/deploy_aws_lambda.md)
+
 ## Banco de dados e usuários
 
 Aplicar as migrações: `poetry run alembic upgrade head`

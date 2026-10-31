@@ -1,6 +1,6 @@
 # Observabilidade
 
-A API envia registros de execução ao [Pydantic Logfire](https://pydantic.dev/logfire), onde ficam consultáveis por 30 dias (plano gratuito). Na Vercel os logs de runtime do plano Hobby duram apenas 1 hora, então é pelo Logfire que se investiga um erro relatado depois.
+A API envia registros de execução ao [Pydantic Logfire](https://pydantic.dev/logfire), onde ficam consultáveis por 30 dias (plano gratuito). Na AWS Lambda os logs ficam 14 dias no CloudWatch, mas é pelo Logfire, com as consultas e as exceções ligadas a cada requisição, que se investiga um erro relatado depois.
 
 A integração fica em `src/core/observabilidade.py` e é ligada pelo `index.py`.
 
@@ -10,11 +10,11 @@ Só quando a variável `LOGFIRE_TOKEN` existe. Sem ela nada é configurado nem e
 
 | Ambiente | `LOGFIRE_TOKEN` | Campo `environment` no Logfire |
 | --- | --- | --- |
-| Produção (Vercel) | Definida | `production` |
-| Homologação (Vercel, branch `develop`) | Definida | `preview` |
+| Produção (AWS Lambda) | Definida | `prod` |
+| Homologação (AWS Lambda) | Definida | `homolog` |
 | Local | Ausente; defina no `.env` só para testar a integração | `dev` |
 
-O `environment` vem da variável `VERCEL_ENV`, preenchida pela própria Vercel.
+O `environment` vem da variável `AMBIENTE`, definida pelo `template.yaml`. Sem ela, vale a `VERCEL_ENV`, da Vercel, e depois `dev`. A tarefa agendada (`lambda_tarefa.py`) também envia registros, com o mesmo `environment`, mas sem as requisições.
 
 ## O que é enviado
 
@@ -39,7 +39,7 @@ Dois cuidados ao escrever código novo:
 
 ## Serverless
 
-Na Vercel a instância pode ser congelada logo após responder. Por isso, quando a variável `VERCEL` existe, um middleware envia os registros pendentes ao fim de cada requisição, com limite de 2 segundos. Fora da Vercel o envio é em lote, em segundo plano.
+Na AWS Lambda (e na Vercel) a instância pode ser congelada logo após responder. Por isso, quando a variável `AWS_LAMBDA_FUNCTION_NAME` (ou `VERCEL`) existe, um middleware envia os registros pendentes ao fim de cada requisição, com limite de 2 segundos. A tarefa agendada faz o mesmo ao fim de cada execução. Fora disso, o envio é em lote, em segundo plano.
 
 ## Configuração
 

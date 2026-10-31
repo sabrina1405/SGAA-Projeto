@@ -12,9 +12,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.core.config import obter_config
 from src.core.observabilidade import configurar_observabilidade
+from src.core.origem import ExigirCloudFront
 from src.main import app as src_app
 
-ENVIRONMENT = os.getenv("VERCEL_ENV", "dev")
+# AMBIENTE vem do template da AWS (homolog ou prod); VERCEL_ENV, da Vercel.
+ENVIRONMENT = os.getenv("AMBIENTE") or os.getenv("VERCEL_ENV", "dev")
 
 # A documentação (/docs, /redoc) é servida pela aplicação montada em "/", que é onde ficam as rotas; a daqui a esconderia.
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
@@ -27,6 +29,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+cloudfront_segredo = obter_config().cloudfront_segredo
+if cloudfront_segredo is not None:
+    # Adicionado por último, fica por fora do CORS e barra antes de tudo.
+    app.add_middleware(ExigirCloudFront, segredo=cloudfront_segredo.get_secret_value())
 
 
 @app.get("/api/health", tags=["Health"])

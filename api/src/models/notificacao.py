@@ -19,6 +19,14 @@ class TipoNotificacao(enum.StrEnum):
     """Guardado como texto: um tipo novo não exige migração."""
 
     RECADO = "recado"
+    AULA_LEMBRETE_SEMANA = "aula_lembrete_semana"
+    AULA_LEMBRETE_DIA = "aula_lembrete_dia"
+    AULA_LEMBRETE_30MIN = "aula_lembrete_30min"
+    AULA_CANCELADA = "aula_cancelada"
+    # A aula e as seguintes da série, num aviso só.
+    AULAS_CANCELADAS = "aulas_canceladas"
+    # O aluno cancelou a participação; o aviso vai para o professor.
+    PARTICIPACAO_CANCELADA = "participacao_cancelada"
 
 
 class StatusEnvio(enum.StrEnum):

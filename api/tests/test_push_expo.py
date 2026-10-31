@@ -1,3 +1,4 @@
+import http.client
 import io
 import json
 import urllib.error
@@ -145,3 +146,36 @@ def test_consulta_os_recibos(urlopen):
     }
     assert falso.requisicoes[0].full_url == push.URL_RECIBOS
     assert falso.corpo() == {"ids": ["t-1", "t-2", "t-3"]}
+
+
+@pytest.mark.parametrize(
+    "erro",
+    [
+        ConnectionResetError("conexão caiu"),
+        http.client.IncompleteRead(b""),
+        http.client.RemoteDisconnected("fechou sem responder"),
+    ],
+)
+def test_erro_ao_ler_a_resposta_vira_falha_push(monkeypatch, urlopen, erro):
+    urlopen()
+
+    class RespostaQueQuebra(io.BytesIO):
+        def read(self, *_):
+            raise erro
+
+    monkeypatch.setattr(
+        push.urllib.request, "urlopen", lambda *_, **__: RespostaQueQuebra()
+    )
+    with pytest.raises(FalhaPush):
+        EnviadorPushExpo().enviar(_mensagens(1))
+
+
+def test_timeout_de_cada_enviador(monkeypatch):
+    monkeypatch.setattr(
+        push, "obter_config", lambda: SimpleNamespace(push_backend="expo")
+    )
+    assert push.obter_enviador_push().timeout_segundos == push.TIMEOUT_SEGUNDOS
+    assert (
+        push.obter_enviador_push_na_requisicao().timeout_segundos
+        == push.TIMEOUT_NA_REQUISICAO_SEGUNDOS
+    )

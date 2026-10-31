@@ -48,4 +48,5 @@ Se não for possível rodar os testes ou as migrations, dizer isso explicitament
 ## Contexto
 
 - A API serve uma versão web e uma versão mobile (Android).
-- A versão web e a API são deployadas na Vercel (serverless).
+- A versão web é deployada na Vercel.
+- A API é deployada na AWS Lambda (serverless), com o AWS SAM, atrás do CloudFront, em homologação e produção. A configuração vem do Parameter Store. Ver [Deploy na AWS Lambda](docs/deploy_aws_lambda.md).

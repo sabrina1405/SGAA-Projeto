@@ -47,3 +47,6 @@ pip-wheel-metadata/
 .mypy_cache/
 .ruff_cache/
 .pyre/
+# AWS (deploy na Lambda)
+.aws.env
+.aws-sam/

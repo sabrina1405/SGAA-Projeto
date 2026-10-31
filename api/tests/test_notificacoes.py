@@ -1,14 +1,15 @@
 from datetime import timedelta
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
-from src.core.push import Recibo
+from src.core.push import FalhaPush, Recibo
 from src.core.security import agora
 from src.models.notificacao import Dispositivo, EnvioPush, Notificacao, StatusEnvio
 from src.schemas.aluno import hoje
-from src.services import notificacao_service, recado_service
+from src.services import aula_service, notificacao_service, recado_service
 from tests.conftest import cabecalho
+from tests.test_aulas import _aula, _horario
 
 TEXTO = "**Aula de sábado** cancelada.\n\n# Reposição na terça"
 
@@ -139,6 +140,53 @@ def test_falha_no_envio_imediato_nao_afeta_a_criacao(
     assert notificacao.processada_em is None
     assert notificacao.tentativas == 1
     assert notificacao.enviar_em > agora()
+
+
+def test_envio_imediato_nao_leva_o_resto_da_fila(
+    client, professor, aluno_maior, enviador_push, sessao, monkeypatch
+):
+    _registrar(client, aluno_maior)
+    data = hoje() + timedelta(days=1)
+    atrasado = _recado(client, professor, data_inicio=data.isoformat())
+    _avancar_ate_o_aviso(monkeypatch, data)
+    novo = _recado(client, professor)
+
+    assert len(enviador_push.mensagens) == 1
+    assert enviador_push.mensagens[0].dados["recado_id"] == novo["id"]
+    assert _notificacao(sessao, atrasado).processada_em is None
+    assert notificacao_service.processar_pendentes(sessao, enviador_push) == 1
+    assert len(enviador_push.mensagens) == 2
+
+
+def test_falha_de_leitura_nao_repete_os_lotes_ja_enviados(
+    client, professor, aluno_maior, enviador_push, sessao, monkeypatch
+):
+    """O Expo aceita o primeiro lote e a conexão cai no segundo."""
+    monkeypatch.setattr(notificacao_service, "MENSAGENS_POR_ENVIO", 1)
+    _registrar(client, aluno_maior, "a")
+    _registrar(client, aluno_maior, "b")
+    enviar_original = enviador_push.enviar
+    chamadas = []
+
+    def enviar(mensagens):
+        chamadas.append(mensagens)
+        if len(chamadas) == 2:
+            raise FalhaPush("conexão caiu ao ler a resposta")
+        return enviar_original(mensagens)
+
+    monkeypatch.setattr(enviador_push, "enviar", enviar)
+    recado = _recado(client, professor)
+
+    assert len(_envios(sessao)) == 1
+    assert _notificacao(sessao, recado).tentativas == 1
+
+    monkeypatch.setattr(enviador_push, "enviar", enviar_original)
+    _avancar(monkeypatch, minutos=6)
+    assert notificacao_service.processar_pendentes(sessao, enviador_push) == 1
+    assert enviador_push.tokens() == [
+        _token(aluno_maior, "a"),
+        _token(aluno_maior, "b"),
+    ]
 
 
 # --- tarefa agendada ---
@@ -332,3 +380,171 @@ def test_recibo_que_nao_chega(
 )
 def test_resumo_do_recado(conteudo, esperado):
     assert recado_service._resumo(conteudo) == esperado
+
+
+# --- aulas ---
+
+
+def _notificacoes_da_aula(sessao, aula_id):
+    return sessao.scalars(
+        select(Notificacao)
+        .where(
+            Notificacao.referencia_id == aula_id,
+            Notificacao.tipo.like("aula%"),
+            Notificacao.deletado_em.is_(None),
+        )
+        .order_by(Notificacao.enviar_em)
+    ).all()
+
+
+def _ate(monkeypatch, momento):
+    """Simula a tarefa agendada rodando em `momento`."""
+    monkeypatch.setattr(notificacao_service, "agora", lambda: momento)
+    monkeypatch.setattr(aula_service, "agora", lambda: momento)
+
+
+def test_aula_agenda_os_tres_lembretes(client, professor, aluno_maior, sessao):
+    aula = _aula(client, professor, [aluno_maior.id], dias=10)
+    inicio = _horario(10)
+    assert [
+        (notificacao.tipo, notificacao.enviar_em)
+        for notificacao in _notificacoes_da_aula(sessao, aula["id"])
+    ] == [
+        ("aula_lembrete_semana", inicio - timedelta(weeks=1)),
+        ("aula_lembrete_dia", inicio - timedelta(days=1)),
+        ("aula_lembrete_30min", inicio - timedelta(minutes=30)),
+    ]
+
+
+def test_lembretes_que_ja_passaram_nao_sao_agendados(
+    client, professor, aluno_maior, sessao
+):
+    aula = _aula(client, professor, [aluno_maior.id], dias=2)
+    tipos = [n.tipo for n in _notificacoes_da_aula(sessao, aula["id"])]
+    assert tipos == ["aula_lembrete_dia", "aula_lembrete_30min"]
+
+
+def test_lembrete_vai_para_os_alunos_ativos(
+    client, professor, aluno_maior, aluno_fora, enviador_push, sessao, monkeypatch
+):
+    for usuario in (professor, aluno_maior, aluno_fora):
+        _registrar(client, usuario)
+    aula = _aula(client, professor, [aluno_maior.id, aluno_fora.id], dias=2)
+    client.post(
+        f"/v1/agenda/{aula['id']}/cancelar",
+        json={},
+        headers=cabecalho(aluno_fora),
+    )
+    enviador_push.mensagens.clear()  # o aviso do cancelamento ao professor
+
+    _ate(monkeypatch, _horario(2) - timedelta(minutes=30))
+    assert notificacao_service.processar_pendentes(sessao, enviador_push) == 2
+    assert enviador_push.tokens() == [_token(aluno_maior), _token(aluno_maior)]
+    dia, trinta = enviador_push.mensagens
+    assert dia.titulo == "Aula amanhã: Espanhol"
+    assert trinta.titulo == "Aula em 30 minutos: Espanhol"
+    assert trinta.corpo == (
+        f"{aula_service.formatar_horario(_horario(2))}, com Usuário de Teste"
+    )
+    assert trinta.dados == {"tipo": "aula_lembrete_30min", "aula_id": aula["id"]}
+
+
+def test_mudar_o_horario_refaz_os_lembretes(client, professor, aluno_maior, sessao):
+    aula = _aula(client, professor, [aluno_maior.id], dias=10)
+    novo = _horario(3, hora=18)
+    client.patch(
+        f"/v1/aulas/{aula['id']}",
+        json={
+            "inicio": novo.isoformat(),
+            "fim": (novo + timedelta(hours=1)).isoformat(),
+        },
+        headers=cabecalho(professor),
+    )
+    sessao.expire_all()
+    assert [
+        (notificacao.tipo, notificacao.enviar_em)
+        for notificacao in _notificacoes_da_aula(sessao, aula["id"])
+    ] == [
+        ("aula_lembrete_dia", novo - timedelta(days=1)),
+        ("aula_lembrete_30min", novo - timedelta(minutes=30)),
+    ]
+
+
+def test_aula_cancelada_avisa_e_descarta_os_lembretes(
+    client, professor, aluno_maior, enviador_push, sessao, monkeypatch
+):
+    _registrar(client, aluno_maior)
+    aula = _aula(client, professor, [aluno_maior.id], dias=2)
+    client.post(
+        f"/v1/aulas/{aula['id']}/cancelar",
+        json={"motivo": "Imprevisto"},
+        headers=cabecalho(professor),
+    )
+    (mensagem,) = enviador_push.mensagens
+    assert mensagem.titulo == "Aula cancelada: Espanhol"
+    assert mensagem.corpo == (
+        f"A aula de {aula_service.formatar_horario(_horario(2))} foi cancelada. "
+        "Motivo: Imprevisto"
+    )
+    assert mensagem.dados == {"tipo": "aula_cancelada", "aula_id": aula["id"]}
+
+    _ate(monkeypatch, _horario(2) - timedelta(minutes=1))
+    assert notificacao_service.processar_pendentes(sessao, enviador_push) == 0
+    assert len(enviador_push.mensagens) == 1
+
+
+def test_serie_cancelada_gera_um_aviso_so(
+    client, professor, aluno_maior, enviador_push, sessao
+):
+    _registrar(client, aluno_maior)
+    aula = _aula(
+        client,
+        professor,
+        [aluno_maior.id],
+        repetir_semanalmente=True,
+        repetir_ate=(hoje() + timedelta(weeks=4)).isoformat(),
+    )
+    client.post(
+        f"/v1/aulas/{aula['id']}/cancelar",
+        params={"escopo": "esta_e_seguintes"},
+        json={},
+        headers=cabecalho(professor),
+    )
+    (mensagem,) = enviador_push.mensagens
+    assert mensagem.titulo == "Aulas canceladas: Espanhol"
+    assert mensagem.dados == {"tipo": "aulas_canceladas", "aula_id": aula["id"]}
+    pendentes = sessao.scalar(
+        select(func.count())
+        .select_from(Notificacao)
+        .where(
+            Notificacao.tipo.like("aula_lembrete%"),
+            Notificacao.processada_em.is_(None),
+            Notificacao.deletado_em.is_(None),
+        )
+    )
+    assert pendentes == 0
+
+
+def test_aluno_que_cancela_avisa_o_professor(
+    client, professor, aluno_maior, enviador_push
+):
+    _registrar(client, professor)
+    _registrar(client, aluno_maior)
+    aula = _aula(client, professor, [aluno_maior.id])
+    client.post(
+        f"/v1/agenda/{aula['id']}/cancelar",
+        json={"motivo": "Consulta médica"},
+        headers=cabecalho(aluno_maior),
+    )
+    (mensagem,) = enviador_push.mensagens
+    assert mensagem.token == _token(professor)
+    assert mensagem.titulo == "Aluno de Teste cancelou a aula"
+    assert mensagem.corpo == (
+        f"Espanhol, {aula_service.formatar_horario(_horario(3))}. "
+        "Motivo: Consulta médica"
+    )
+    assert mensagem.dados == {
+        "tipo": "participacao_cancelada",
+        "aula_id": aula["id"],
+        "aluno_id": aluno_maior.id,
+    }
