@@ -1,6 +1,6 @@
 from fastapi import APIRouter, FastAPI
 
-from src.api.routes import auth, grupos, mural, recados, usuarios
+from src.api.routes import auth, dispositivos, grupos, mural, recados, usuarios
 from src.core.errors import registrar_tratadores
 from src.schemas.resposta import RespostaErro
 
@@ -18,6 +18,7 @@ v1.include_router(usuarios.router)
 v1.include_router(grupos.router)
 v1.include_router(recados.router)
 v1.include_router(mural.router)
+v1.include_router(dispositivos.router)
 app.include_router(v1)
 
 

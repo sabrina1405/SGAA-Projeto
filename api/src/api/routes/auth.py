@@ -33,7 +33,7 @@ from src.schemas.auth import (
 )
 from src.schemas.resposta import Resposta
 from src.schemas.usuario import UsuarioResposta
-from src.services import auth_service, usuario_service
+from src.services import auth_service, dispositivo_service, usuario_service
 
 router = APIRouter(prefix="/auth", tags=["Autenticação"])
 
@@ -229,5 +229,6 @@ def renovar(usuario: UsuarioAtual) -> Resposta[TokenResposta]:
 @router.post("/sair-de-todos")
 def sair_de_todos(usuario: UsuarioAtual, sessao: SessaoDep) -> Resposta[None]:
     auth_service.invalidar_tokens(usuario)
+    dispositivo_service.remover_todos(sessao, usuario)
     sessao.commit()
     return Resposta(mensagem="Sessões encerradas")

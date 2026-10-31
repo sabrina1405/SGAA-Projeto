@@ -25,6 +25,11 @@ class Config(BaseSettings):
     smtp_user: str = ""
     smtp_password: SecretStr = SecretStr("")
 
+    # "expo" envia pelo Expo Push Service; "console" só registra no log.
+    push_backend: Literal["console", "expo"] = "console"
+    # Access token do Expo, exigido quando o projeto ativa o envio com segurança reforçada.
+    expo_access_token: SecretStr | None = None
+
     # Token de escrita do Logfire. Sem ele, a observabilidade fica desligada.
     logfire_token: SecretStr | None = None
 

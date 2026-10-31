@@ -88,6 +88,9 @@ CORS_ORIGINS=http://localhost:8081
 # "console" apenas loga os e-mails; "smtp" envia de verdade (ver .env.example)
 EMAIL_BACKEND=console
 
+# "console" apenas loga as notificações push; "expo" envia de verdade (ver docs/notificacoes_push.md)
+PUSH_BACKEND=console
+
 # Opcional: token do Logfire. Sem ele nada é enviado (ver docs/observabilidade.md)
 # LOGFIRE_TOKEN=
 ```
