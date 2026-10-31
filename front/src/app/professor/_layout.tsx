@@ -3,7 +3,7 @@ import { Tabs } from 'expo-router';
 
 import { palette } from '@/constants/palette';
 
-// Abas da área do professor. Fica em app/professor/_layout.tsx.
+
 export default function ProfessorLayout() {
   return (
     <Tabs
@@ -15,7 +15,7 @@ export default function ProfessorLayout() {
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="inicio"
         options={{
           title: 'Início',
           tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" size={size} color={color} />,
