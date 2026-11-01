@@ -1,7 +1,7 @@
 import * as Device from 'expo-device';
 import { Platform, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
+import List_item from '@/components/list_item';
 import { AnimatedIcon } from '@/components/animated-icon';
 import { HintRow } from '@/components/hint-row';
 import { ThemedText } from '@/components/themed-text';
@@ -53,9 +53,11 @@ export default function HomeScreen() {
             title="Fresh start"
             hint={<ThemedText type="code">npm run reset-project</ThemedText>}
           />
+        <List_item />
         </ThemedView>
 
         {Platform.OS === 'web' && <WebBadge />}
+
       </SafeAreaView>
     </ThemedView>
   );
