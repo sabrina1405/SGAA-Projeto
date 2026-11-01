@@ -4,3 +4,19 @@
 
 expo-env.d.ts
 # @end expo-cli
+
+# Dependências
+node_modules/
+**/node_modules/
+
+# Variáveis de ambiente
+.env
+.env.*
+!.env.example
+
+# Arquivos de build
+dist/
+build/
+
+# Logs
+npm-debug.log*

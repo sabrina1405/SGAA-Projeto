@@ -25,7 +25,7 @@ export default function List_item(){
 
         <View style={styles.containerInfos}>
             <View style={styles.iconContainer}>
-                <View><Text>ICONE</Text></View>
+                 
             </View>
 
             <View>
