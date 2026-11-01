@@ -8,7 +8,7 @@ export default function ProfessorLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerShown: false, // cada aba usa o header do próprio Stack
+        headerShown: false, 
         tabBarActiveTintColor: palette.primary,
         tabBarInactiveTintColor: '#555555',
         tabBarLabelStyle: { fontSize: 11 },
