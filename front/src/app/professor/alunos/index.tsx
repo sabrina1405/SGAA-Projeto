@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 import { palette } from '@/constants/palette';
 
-// Tipo de exemplo para os itens da lista
 type AlunoItem = {
   id: string;
   nome: string;
@@ -15,11 +15,11 @@ type AlunoItem = {
 };
 
 const ALUNOS_MOCK: AlunoItem[] = [
-  { id: '1', nome: 'Nome Aluno', telefone: '(00) 00000-0000', email: 'nomealuno@gmail.com', ativo: true, tipo: 'aluno' },
-  { id: '2', nome: 'Nome Aluno', telefone: '(00) 00000-0000', email: 'nomealuno@gmail.com', ativo: true, tipo: 'aluno' },
-  { id: '3', nome: 'Nome Aluno', telefone: '(00) 00000-0000', email: 'nomealuno@gmail.com', ativo: true, tipo: 'aluno' },
-  { id: '4', nome: 'Nome Aluno', telefone: '(00) 00000-0000', email: 'nomealuno@gmail.com', ativo: true, tipo: 'aluno' },
-  { id: '5', nome: 'Nome Aluno', telefone: '(00) 00000-0000', email: 'nomealuno@gmail.com', ativo: false, tipo: 'aluno' },
+  { id: '1', nome: 'Ana Souza', telefone: '(11) 98888-1111', email: 'anasouza@gmail.com', ativo: true, tipo: 'aluno' },
+  { id: '2', nome: 'Bruno Lima', telefone: '(11) 97777-2222', email: 'brunolima@gmail.com', ativo: true, tipo: 'aluno' },
+  { id: '3', nome: 'Carla Dias', telefone: '(11) 96666-3333', email: 'carladias@gmail.com', ativo: true, tipo: 'aluno' },
+  { id: '4', nome: 'Diego Alves', telefone: '(11) 95555-4444', email: 'diegoalves@gmail.com', ativo: true, tipo: 'aluno' },
+  { id: '5', nome: 'Helena Rocha', telefone: '(11) 94444-5555', email: 'helenarocha@gmail.com', ativo: false, tipo: 'aluno' },
   { id: '6', nome: 'Nome do Grupo', ativo: true, tipo: 'grupo' },
 ];
 
@@ -28,9 +28,10 @@ function Separador() {
 }
 
 export default function AlunosScreen() {
+  const router = useRouter();
   const [mostrarInativos, setMostrarInativos] = useState(false);
 
-  const dadosFiltrados = ALUNOS_MOCK.filter(item => mostrarInativos ? true : item.ativo);
+  const dadosFiltrados = ALUNOS_MOCK.filter(item => (mostrarInativos ? true : item.ativo));
 
   return (
     <FlatList
@@ -100,9 +101,10 @@ export default function AlunosScreen() {
             </Text>
           </View>
 
+          {/* Botão para navegar especificamente para os detalhes do ID clicado */}
           <Pressable 
             style={({ pressed }) => [styles.viewButton, pressed && styles.pressionado]}
-            onPress={() => {}}
+            onPress={() => router.push(`/professor/alunos/${item.id}`)}
           >
             <Ionicons name="eye-outline" size={18} color={palette.title} />
           </Pressable>
@@ -117,7 +119,6 @@ const styles = StyleSheet.create({
   conteudo: { padding: 16, paddingBottom: 32 },
   headerWrapper: { gap: 14, marginBottom: 12 },
 
-  /* Ações Superiores */
   acoesContainer: {
     flexDirection: 'row',
     gap: 8,
@@ -137,7 +138,6 @@ const styles = StyleSheet.create({
   },
   botaoTexto: { color: '#ffffff', fontSize: 11, fontWeight: '600' },
 
-  /* Switch Inativos */
   switchContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -151,7 +151,6 @@ const styles = StyleSheet.create({
   },
   switchLabel: { fontSize: 12, fontWeight: '600', color: palette.title },
 
-  /* Cartão de Aluno / Grupo */
   cardItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -191,7 +190,6 @@ const styles = StyleSheet.create({
   itemSubtitle: { fontSize: 11, color: palette.textMuted },
   itemEmail: { fontSize: 11, color: palette.textMuted },
 
-  /* Badges de Status */
   badgeStatus: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -204,7 +202,6 @@ const styles = StyleSheet.create({
   badgeTextAtivo: { color: '#2E7D32' },
   badgeTextInativo: { color: '#C62828' },
 
-  /* Botão de Visualização */
   viewButton: {
     width: 36,
     height: 36,

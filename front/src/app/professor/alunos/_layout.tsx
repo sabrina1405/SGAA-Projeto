@@ -4,7 +4,7 @@ import { Pressable } from 'react-native';
 
 import { palette } from '@/constants/palette';
 
-export default function AlunosLayout() {
+export default function InformacoesAlunoLayout() {
   const router = useRouter();
 
   return (
@@ -18,7 +18,7 @@ export default function AlunosLayout() {
       <Stack.Screen
         name="index"
         options={{
-          title: 'Alunos',
+          title: 'Informações do Aluno',
           headerLeft: () => (
             <Pressable
               accessibilityRole="button"
