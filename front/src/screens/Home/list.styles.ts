@@ -1,41 +1,40 @@
 import { StyleSheet } from "react-native";
-import {paleta} from "@/components/theme/colors"
+import { paleta } from "@/components/theme/colors";
 
 export const styles = StyleSheet.create({
     containerList: {
         backgroundColor: "#fff",
         width: "100%",
         height: 95,
-        display: "flex",
         flexDirection: "row",
         alignItems: "center",
-        gap: 20,
         borderRadius: 8,
-        boxShadow: '0px 4px 10px 0px rgba(0, 0, 0, 0.15)',
+        overflow: "hidden",
+        elevation: 3, 
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 10,
     },
 
     lateralBar: {
         backgroundColor: paleta.purple01,
-        height: 95,
-        width: 25,
-        borderBottomLeftRadius: 8,
-        borderTopLeftRadius: 8,
+        height: "100%",
+        width: 12, // Ajustado para ficar proporcional
     },
 
     containerInfos: {
-        display: "flex",
+        flex: 1,
         flexDirection: "row",
         alignItems: "center",
-        justifyContent: "space-evenly",
-        gap: 20,
-        padding: 10,
+        gap: 15,
+        paddingHorizontal: 15,
     },
 
     iconContainer: {
         width: 45,
         height: 45,
-        backgroundColor: paleta.purple01,
-        padding: 5,
+        backgroundColor: paleta.purple01 + "20", // Fundo translúcido opcional
         borderRadius: 8,
         alignItems: "center",
         justifyContent: "center",
@@ -45,7 +44,7 @@ export const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: "bold",
         textAlign: "left",
-        
+        color: "#333",
     },
     
     infosList: {
