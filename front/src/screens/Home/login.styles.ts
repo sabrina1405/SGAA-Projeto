@@ -97,9 +97,10 @@ recover: {
 
 loginButton: {
   width: 100,
-  height: 20,
+  height: 40,
   borderRadius: 8,
   padding: 10,
+  marginTop: 10,
   backgroundColor: '#1B8D33',
   alignItems: 'center',
   justifyContent: 'center',
@@ -134,31 +135,54 @@ reenviar: {
 },
 
 progressBar: {
-  width: '58%',
+  width: '100%',
   height: 5,
   backgroundColor: '#C0C0C0',
   borderRadius: 10,
   overflow: 'hidden',
-  marginTop: 18,
 },
 
 progressFill: {
-  width: '45%',
   height: '100%',
-  backgroundColor: '#FF0000',
   borderRadius: 10,
 },
 
+passwordStrength: {
+  width: '82%',
+  marginTop: 4,
+},
+
+strengthLabel: {
+  color: '#FFFFFF',
+  fontSize: 11,
+  marginBottom: 6,
+},
+
 rules: {
-  width: '58%',
+  width: '82%',
   marginTop: 10,
   alignSelf: 'center',
+},
+
+ruleRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 6,
+  marginBottom: 3,
 },
 
 rule: {
   color: '#FFFFFF',
   fontSize: 11,
   lineHeight: 15,
+},
+
+ruleValid: {
+  color: '#8FF0AC',
+},
+
+ruleInvalid: {
+  color: '#FFD0D0',
 },
 
 inputContainer: {

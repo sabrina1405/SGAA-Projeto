@@ -1,11 +1,36 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StatusBar, } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Fontisto, Feather, Ionicons } from '@expo/vector-icons';
 import {styles} from '@/screens/Home/login.styles';
 
 export default function PasswordRecover(){
   const [showPassword, setShowPassword] = useState(false);
+  const [password, setPassword] = useState('');
+  const specialCharacterCount = (password.match(/[^A-Za-z0-9\s]/g) ?? []).length;
+  const passwordRules = [
+    { label: 'Mínimo 6 caracteres', valid: password.length >= 6 },
+    { label: 'Máximo 100 caracteres', valid: password.length > 0 && password.length <= 100 },
+    { label: '1 caractere maiúsculo', valid: /[A-Z]/.test(password) },
+    { label: '1 caractere minúsculo', valid: /[a-z]/.test(password) },
+    { label: '2 caracteres especiais', valid: specialCharacterCount >= 2 },
+  ];
+  const validRulesCount = passwordRules.filter((rule) => rule.valid).length;
+  const progress = (validRulesCount / passwordRules.length) * 100;
+  const progressColor = password.length === 0
+    ? '#C0C0C0'
+    : validRulesCount === passwordRules.length
+      ? '#35C46A'
+      : validRulesCount >= 3
+        ? '#F5B82E'
+        : '#FF4D4F';
+  const strengthLabel = password.length === 0
+    ? 'Sem senha'
+    : validRulesCount === passwordRules.length
+      ? 'Forte'
+      : validRulesCount >= 3
+        ? 'Média'
+        : 'Fraca';
 
 return(
 <View style={styles.container}>
@@ -72,6 +97,8 @@ return(
       <TextInput
         placeholder="Senha"
         placeholderTextColor="#666"
+        value={password}
+        onChangeText={setPassword}
         secureTextEntry={!showPassword}
         style={styles.input}
       />
@@ -89,16 +116,48 @@ return(
       </TouchableOpacity>
     </View>
 
-    <View style={styles.progressBar}>
-      <View style={styles.progressFill} />
+    <View style={styles.passwordStrength}>
+      <Text style={styles.strengthLabel}>Força da senha: {strengthLabel}</Text>
+      <View
+        style={styles.progressBar}
+        accessibilityRole="progressbar"
+        accessibilityLabel={`Força da senha: ${strengthLabel}`}
+        accessibilityValue={{ min: 0, max: 100, now: progress }}
+      >
+        <View
+          style={[
+            styles.progressFill,
+            { width: `${progress}%`, backgroundColor: progressColor },
+          ]}
+        />
+      </View>
     </View>
 
     <View style={styles.rules}>
-      <Text style={styles.rule}>• Mínimo 6 caracteres</Text>
-      <Text style={styles.rule}>• Máximo 100 caracteres</Text>
-      <Text style={styles.rule}>• 1 Caractere Maiúsculo</Text>
-      <Text style={styles.rule}>• 1 Caractere Minúsculo</Text>
-      <Text style={styles.rule}>• 2 Caracteres Especiais</Text>
+      {passwordRules.map((rule) => (
+        <View key={rule.label} style={styles.ruleRow}>
+          <Ionicons
+            name={
+              rule.valid
+                ? 'checkmark-circle'
+                : password.length > 0
+                  ? 'close-circle'
+                  : 'ellipse-outline'
+            }
+            size={14}
+            color={rule.valid ? '#35C46A' : password.length > 0 ? '#FF7777' : '#FFFFFF'}
+          />
+          <Text
+            style={[
+              styles.rule,
+              rule.valid && styles.ruleValid,
+              !rule.valid && password.length > 0 && styles.ruleInvalid,
+            ]}
+          >
+            {rule.label}
+          </Text>
+        </View>
+      ))}
     </View>
 
         <TouchableOpacity>

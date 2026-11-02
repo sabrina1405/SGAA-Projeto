@@ -1,21 +1,43 @@
 import { StyleSheet } from "react-native";
 
 export const styles = StyleSheet.create({
+    overlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    },
+
+    backdrop: {
+        ...StyleSheet.absoluteFill,
+    },
+
+    drawer: {
+        flex: 1,
+        width: '75%',
+        maxWidth: 360,
+    },
+
     container: {
         flex: 1,
-        width: '60%',
         paddingTop: 16,
+    },
+
+    menuHeader: {
+        minHeight: 64,
+        paddingHorizontal: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-end',
+        gap: 85
     },
 
     logo: {
         width: 64,
         height: 64,
+        alignSelf: 'center',
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: '#F3EAF5',
         borderRadius: 18,
-        marginBottom: 18,
-        alignSelf: 'center',
     },
 
     logoText: {

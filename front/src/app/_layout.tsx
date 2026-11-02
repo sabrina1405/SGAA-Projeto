@@ -7,6 +7,14 @@ export default function RootLayout() {
         <Stack.Screen name="Login" />
         <Stack.Screen name="Home" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="Menu"
+          options={{
+            presentation: "transparentModal",
+            animation: "fade",
+            contentStyle: { backgroundColor: "transparent" },
+          }}
+        />
       </Stack>
 /*     </AuthProvider>
  */  );

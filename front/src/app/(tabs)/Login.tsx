@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Fontisto, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -25,11 +25,21 @@ export default function LoginScreen() {
       >
         {isStudentLogin ? (
           <>
-            <View style={styles.logo} />
 
-            <View style={styles.studentButton}>
-              <Text style={styles.studentButtonText}>Área do Aluno</Text>
-            </View>
+        <View style={styles.logo}>
+          <Text style={styles.logoText}>SGAA</Text>
+        </View>
+
+        <Text style={styles.subtitleStudent}>
+          Sistema de gerenciamento de Aulas e Agendamentos
+        </Text>
+
+            <Pressable 
+            style={[styles.studentButton, {marginBottom: 28 }]}
+            onPress={() => setIsStudentLogin(false)}
+            >
+              <Text style={styles.studentButtonText}>Acessar Área do Professor</Text>
+            </Pressable>
 
             <View style={styles.inputContainer}>
               <Fontisto name="email" size={20} color="#666" />
@@ -62,7 +72,7 @@ export default function LoginScreen() {
 
             <TouchableOpacity 
             style={styles.recoverContainer}
-            onPress={() => router.push('/')}
+            onPress={() => router.push('/PasswordRec')}
             >
 
               <Text style={styles.recover}>Recuperar senha</Text>
@@ -82,9 +92,10 @@ export default function LoginScreen() {
           </>
         ) : (
           <>
-            <View style={styles.logo} />
 
-            <Text style={styles.title}>SGAA</Text>
+        <View style={styles.logo}>
+          <Text style={styles.logoText}>SGAA</Text>
+        </View>
 
             <Text style={styles.subtitle}>
               Sistema de gerenciamento de Aulas e Agendamentos
@@ -130,7 +141,7 @@ export default function LoginScreen() {
 
             <TouchableOpacity 
             style={styles.recoverContainer}
-            onPress={() => router.push('/')}
+            onPress={() => router.push('/PasswordRec')}
             >
               <Text style={styles.recover}>Recuperar senha</Text>
             </TouchableOpacity>
@@ -166,10 +177,20 @@ const styles = StyleSheet.create({
   },
 
   logo: {
-    width: 80,
-    height: 80,
-    backgroundColor: '#D9D9D9',
-    marginBottom: 10,
+      width: 64,
+      height: 64,
+      alignSelf: 'center',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#F3EAF5',
+      borderRadius: 18,
+  },
+
+  logoText: {
+    color: '#84009A',
+    fontSize: 17,
+    fontWeight: '800',
+    alignSelf: 'center',
   },
 
   title: {
@@ -182,15 +203,22 @@ const styles = StyleSheet.create({
   subtitle: {
     color: '#fff',
     fontSize: 14,
-    marginTop: 6,
+    paddingVertical: 28,
     fontFamily: 'sans-serif',
     fontWeight: 300,
-    marginBottom: 28,
+  },
+
+  subtitleStudent: {
+    color: '#fff',
+    fontSize: 14,
+    paddingVertical: 28,
+    fontFamily: 'sans-serif',
+    fontWeight: 300,
   },
 
   studentButton: {
     width: '82%',
-    margin: 20  ,
+    margin: 10,
     height: 40,
     backgroundColor: '#8A007A',
     borderRadius: 6,

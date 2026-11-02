@@ -1,16 +1,11 @@
-import {
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  Pressable,
-} from 'react-native';
-
+import { SafeAreaView, ScrollView, StyleSheet, Text, View, Pressable, } from 'react-native';
+import { useRef, useState } from 'react';
+import styles from '@/screens/Home/home.styles';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Feather } from '@expo/vector-icons';
+import { BlurTargetView, BlurView } from 'expo-blur';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { List_item, type ListItemCategory } from '@/components/list_item';
+import { List_item, StatusConfig, type ListItemCategory, type ListItemStatus, } from '@/components/list_item';
 
 const mockData = [
     {
@@ -51,8 +46,18 @@ const mockData = [
     },
 ];
 
+const statusLabels: Record<ListItemStatus, string> = {
+  vencida: 'Vencida',
+  proxima: 'Próxima',
+  realizada: 'Realizada',
+};
+
+type HomeItem = (typeof mockData)[number];
 
 export default function HomeScreen() {
+  const blurTargetRef = useRef<View | null>(null);
+  const [selectedItem, setSelectedItem] = useState<HomeItem | null>(null);
+
   const renderItems = (categoria: ListItemCategory) =>
     mockData
       .filter((item) => item.categoria === categoria)
@@ -65,182 +70,160 @@ export default function HomeScreen() {
           nomeAluno={item.nomeAluno}
           status={item.status}
           onPress={() => {
+            if (item.categoria === 'Aula' || item.categoria === 'Atividade') {
+              setSelectedItem(item);
+              return;
+            }
+
             console.log(`Clicou no item: ${item.titulo}`);
           }}
         />
       ));
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <LinearGradient
-          colors={['#7B0087', '#980070', '#C40E35']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.header}
-        >
-          <View style={styles.headerContent}>
-            <View style={styles.headerText}>
-              <Text style={styles.logo}>Logo</Text>
-
-              <Text style={styles.welcome}>
-                Seja Bem-Vindo(a) de volta
-              </Text>
-
-              <Text style={styles.studentName}>
-                Ola, Aluno
-              </Text>
-            </View>
-
-            <Pressable
-              onPress={() => router.push('/Menu')}
-              hitSlop={12}
-              accessibilityRole="button"
-              accessibilityLabel="Abrir menu"
-              style={({ pressed }) => [
-                styles.menuButton,
-                pressed && styles.menuButtonPressed,
-              ]}
+    <View style={styles.root}>
+      <BlurTargetView ref={blurTargetRef} style={styles.root}>
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.container}>
+            <LinearGradient
+              colors={['#7B0087', '#980070', '#C40E35']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.header}
             >
-              <Feather name="menu" size={34} color="#FFFFFF" />
-            </Pressable>
+              <View style={styles.headerContent}>
+                <View style={styles.headerText}>
+                  <Text style={styles.logo}>Logo</Text>
+
+                  <Text style={styles.welcome}>
+                    Seja Bem-Vindo(a) de volta
+                  </Text>
+
+                  <Text style={styles.studentName}>
+                    Ola, Aluno
+                  </Text>
+                </View>
+
+                <Pressable
+                  onPress={() => router.push('/Menu')}
+                  hitSlop={12}
+                  accessibilityRole="button"
+                  accessibilityLabel="Abrir menu"
+                  style={({ pressed }) => [
+                    styles.menuButton,
+                    pressed && styles.menuButtonPressed,
+                  ]}
+                >
+                  <Feather name="menu" size={34} color="#FFFFFF" />
+                </Pressable>
+              </View>
+            </LinearGradient>
+
+            <ScrollView
+              style={styles.scroll}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>
+                  PRÓXIMAS AULAS
+                </Text>
+
+                <View style={styles.listContainer}>{renderItems('Aula')}</View>
+              </View>
+
+              <View style={styles.separator} />
+
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>
+                  PRÓXIMAS ATIVIDADES
+                </Text>
+
+                <View style={styles.listContainer}>{renderItems('Atividade')}</View>
+              </View>
+
+              <View style={styles.separator} />
+
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>
+                  PRÓXIMOS PAGAMENTOS
+                </Text>
+                <View style={styles.listContainer}>{renderItems('Pagamento')}</View>
+              </View>
+            </ScrollView>
           </View>
-        </LinearGradient>
+        </SafeAreaView>
+      </BlurTargetView>
 
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              PRÓXIMAS AULAS
-            </Text>
+      {selectedItem && (
+        <View style={styles.modalOverlay}>
+          <BlurView
+            blurTarget={blurTargetRef}
+            intensity={70}
+            tint="dark"
+            blurMethod="dimezisBlurView"
+            pointerEvents="none"
+            style={StyleSheet.absoluteFill}
+          />
 
-            <View style={styles.listContainer}>{renderItems('Aula')}</View>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setSelectedItem(null)}
+            accessibilityRole="button"
+            accessibilityLabel="Fechar detalhes"
+          />
+
+          <View style={styles.modalContent} pointerEvents="box-none">
+            <View style={styles.detailCard} accessibilityViewIsModal>
+              <View style={styles.detailHeader}>
+                <View style={styles.detailHeading}>
+                  <Text style={styles.detailEyebrow}>{selectedItem.categoria}</Text>
+                  <Text style={styles.detailTitle}>{selectedItem.titulo}</Text>
+                </View>
+
+                <Pressable
+                  onPress={() => setSelectedItem(null)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Fechar detalhes"
+                  hitSlop={12}
+                  style={styles.closeButton}
+                >
+                  <Feather name="x" size={22} color="#555" />
+                </Pressable>
+              </View>
+
+              <View style={styles.detailDivider} />
+
+              <View style={styles.detailStatus}>
+                <View
+                  style={[
+                    styles.statusDot,
+                    { backgroundColor: StatusConfig[selectedItem.status].cor },
+                  ]}
+                />
+                <Text style={styles.detailStatusText}>
+                  {statusLabels[selectedItem.status]}
+                </Text>
+              </View>
+
+              <View style={styles.detailInfoRow}>
+                <Feather name="calendar" size={18} color="#84009A" />
+                <Text style={styles.detailInfoText}>{selectedItem.dataHora}</Text>
+              </View>
+
+              {selectedItem.nomeAluno && (
+                <View style={styles.detailInfoRow}>
+                  <Ionicons name="person-outline" size={18} color="#84009A" />
+                  <Text style={styles.detailInfoText}>{selectedItem.nomeAluno}</Text>
+                </View>
+              )}
+
+              <Text style={styles.descriptionLabel}>Descrição</Text>
+              <Text style={styles.descriptionText}>{selectedItem.descricao}</Text>
+            </View>
+          </View>
         </View>
-
-          <View style={styles.separator} />
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              PRÓXIMAS ATIVIDADES
-            </Text>
-
-            <View style={styles.listContainer}>{renderItems('Atividade')}</View>
-          </View>
-
-          <View style={styles.separator} />
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              PRÓXIMOS PAGAMENTOS
-            </Text>
-            <View style={styles.listContainer}>{renderItems('Pagamento')}</View>
-          </View>
-        </ScrollView>
-      </View>
-    </SafeAreaView>
+      )}
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#800080',
-  },
-
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-
-  header: {
-    height: 106,
-    paddingHorizontal: 13,
-    paddingTop: 15,
-    paddingBottom: 13,
-  },
-
-  headerContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-  },
-
-  headerText: {
-    flex: 1,
-  },
-
-  logo: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: '400',
-    marginBottom: 8,
-  },
-
-  welcome: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '400',
-  },
-
-  studentName: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    lineHeight: 21,
-    fontWeight: '700',
-  },
-
-  menuButton: {
-    width: 48,
-    height: 48,
-    marginTop: -2,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 24,
-  },
-
-  menuButtonPressed: {
-    backgroundColor: 'rgba(255,255,255,0.14)',
-  },
-
-  scroll: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-
-  scrollContent: {
-    paddingTop: 31,
-    paddingBottom: 42,
-  },
-
-  section: {
-    paddingHorizontal: 10,
-  },
-
-  sectionTitle: {
-    color: '#626262',
-    fontSize: 16,
-    lineHeight: 21,
-    fontWeight: '400',
-    marginLeft: 15,
-    marginBottom: 3,
-  },
-
-  separator: {
-    height: 1,
-    backgroundColor: '#BDBDBD',
-    marginHorizontal: 6,
-    marginTop: 35,
-    marginBottom: 29,
-  },
-
-  listContainer: {
-        padding: 16,
-        gap: 12,
-    },
-});
