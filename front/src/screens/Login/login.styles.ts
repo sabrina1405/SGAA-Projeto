@@ -11,12 +11,23 @@ card: {
   justifyContent: 'center'
 },
 
-logo: {
-  width: 80,
-  height: 80,
-  backgroundColor: '#D9D9D9',
-  marginBottom: 10,
-},
+  logo: {
+    width: 64,
+    height: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3EAF5',
+    borderRadius: 18,
+    marginBottom: 18,
+    alignSelf: 'center',
+  },
+
+  logoText: {
+    color: '#84009A',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+
 
 title: {
   color: '#fff',

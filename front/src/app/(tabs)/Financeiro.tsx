@@ -1,21 +1,12 @@
-import React, { useMemo, useState } from 'react';
-import {
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  SafeAreaView,
-  ScrollView,
-  Pressable,
-  StatusBar,
-} from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Platform, Text, TextInput, View, SafeAreaView, ScrollView, Pressable, StatusBar, } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { styles } from '@/screens/Home/Financeiro/financeiro.styles';
+import { obterPagamentos, type PagamentoApi } from '@/services/api';
 
-// Configuração de status solicitada
 export const StatusConfig = {
     vencida: {
         icone: "time-outline",
@@ -49,33 +40,6 @@ interface Transacao {
 type StatusFilter = keyof typeof StatusConfig | 'todos';
 type FilterPanel = 'status' | 'valor' | 'data' | null;
 type DateFilterTarget = 'inicio' | 'fim';
-
-const transacoes: Transacao[] = [
-  {
-    id: '1',
-    nome: 'Mensalidade - Espanhol',
-    vencimento: '22/09/2026',
-    dataOriginal: new Date(2026, 8, 22),
-    valor: 250.00,
-    status: 'vencida',
-  },
-  {
-    id: '2',
-    nome: 'Mensalidade - Espanhol',
-    vencimento: '28/09/2026',
-    dataOriginal: new Date(2026, 8, 28),
-    valor: 250.00,
-    status: 'proxima',
-  },
-  {
-    id: '3',
-    nome: 'Mensalidade - Espanhol',
-    vencimento: '22/08/2026',
-    dataOriginal: new Date(2026, 7, 22),
-    valor: 250.00,
-    status: 'realizada',
-  },
-];
 
 const statusOptions: StatusFilter[] = ['todos', 'vencida', 'proxima', 'realizada'];
 
@@ -111,7 +75,26 @@ function formatDateFilter(value: Date | null): string {
   return value ? value.toLocaleDateString('pt-BR') : '';
 }
 
+function mapearPagamento(pagamento: PagamentoApi): Transacao {
+  const date = getTransactionDate(pagamento.data_vencimento);
+  if (!date) {
+    throw new Error(`Data inválida recebida pela API: ${pagamento.data_vencimento}`);
+  }
+
+  return {
+    id: String(pagamento.id),
+    nome: pagamento.titulo,
+    vencimento: date.toLocaleDateString('pt-BR'),
+    dataOriginal: pagamento.data_vencimento,
+    valor: pagamento.valor,
+    status: pagamento.status,
+  };
+}
+
 export default function FinanceiroScreen() {
+  const [transacoes, setTransacoes] = useState<Transacao[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('todos');
   const [minimumAmount, setMinimumAmount] = useState('');
   const [maximumAmount, setMaximumAmount] = useState('');
@@ -119,6 +102,47 @@ export default function FinanceiroScreen() {
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [filterPanel, setFilterPanel] = useState<FilterPanel>(null);
   const [datePickerTarget, setDatePickerTarget] = useState<DateFilterTarget | null>(null);
+
+  const loadTransactions = useCallback(
+    async () => (await obterPagamentos()).map(mapearPagamento),
+    [],
+  );
+
+  const handleLoadError = useCallback((error: unknown) => {
+    console.error('Erro ao carregar pagamentos:', error);
+    setLoadError(
+      error instanceof Error
+        ? error.message
+        : 'Não foi possível carregar os pagamentos.',
+    );
+  }, []);
+
+  const retryTransactions = () => {
+    setLoading(true);
+    setLoadError(null);
+    void loadTransactions()
+      .then(setTransacoes)
+      .catch(handleLoadError)
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    let active = true;
+    loadTransactions()
+      .then((data) => {
+        if (active) setTransacoes(data);
+      })
+      .catch((error: unknown) => {
+        if (active) handleLoadError(error);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [handleLoadError, loadTransactions]);
 
   const parsedMinimum = parseCurrencyInput(minimumAmount);
   const parsedMaximum = parseCurrencyInput(maximumAmount);
@@ -168,6 +192,7 @@ export default function FinanceiroScreen() {
     parsedMinimum,
     startDate,
     statusFilter,
+    transacoes,
   ]);
 
   const itensEmAberto = useMemo(() => filteredTransactions
@@ -244,9 +269,7 @@ export default function FinanceiroScreen() {
     : 'DATA';
 
   const handlePagarAgora = () => {
-    if (proximoVencimentoItem) {
-      router.push('/'); 
-    }
+      router.push('/Pagamento'); 
   };
 
   // Renderizador de badge baseado no StatusConfig
@@ -262,6 +285,7 @@ export default function FinanceiroScreen() {
     );
   };
 
+  
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#7B0087" />
@@ -294,6 +318,16 @@ export default function FinanceiroScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
+      {loading && <ActivityIndicator color="#7B0087" size="large" />}
+      {loadError && (
+        <View>
+          <Text>{loadError}</Text>
+          <Pressable onPress={retryTransactions} accessibilityRole="button">
+            <Text>Tentar novamente</Text>
+          </Pressable>
+        </View>
+      )}
+
       <LinearGradient
         colors={['#7B0087', '#980070', '#C40E35']}
         start={{ x: 0, y: 0 }}
@@ -314,7 +348,6 @@ export default function FinanceiroScreen() {
           <Pressable 
             style={[!proximoVencimentoItem && styles.payButtonDisabled]}
             onPress={handlePagarAgora}
-            disabled={!proximoVencimentoItem}
           >
             <LinearGradient
             start={{ x: 0.65, y: 0 }}
@@ -549,344 +582,3 @@ export default function FinanceiroScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  
-  header: {
-    height: 106,
-    paddingHorizontal: 13,
-    paddingTop: 15,
-    paddingBottom: 13,
-  },
-  
-  headerContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-  },
-  
-  headerText: {
-    flex: 1,
-  },
-  
-  textPage: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: 'bold',
-    alignSelf: 'center',
-    paddingVertical: 14,
-  },
-  
-  menuButton: {
-    paddingVertical: 12,
-  },
-  
-  menuButtonPressed: {
-    opacity: 0.7,
-  },
-
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
-  },
-
-  card: {
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-
-  cardLabel: {
-    color: '#fff',
-    fontSize: 14,
-    marginBottom: 4,
-  },
-
-  cardAmount: {
-    color: '#ffffff',
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 6,
-  },
-
-  cardDueDate: {
-    color: '#ffff',
-    fontSize: 12,
-    marginBottom: 16,
-  },
-
-    payButton: {
-        width: '100%',
-        height: 40,
-        borderRadius: 8,
-        padding: 10,
-        marginTop: 10,
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexDirection: 'row',
-        paddingVertical: 10,
-        paddingHorizontal: 24,
-    },
-
-  payButtonDisabled: {
-    backgroundColor: '#cccccc',
-  },
-
-  payIcon: {
-    marginRight: 6,
-  },
-
-  payButtonText: {
-    color: '#ffffff',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-
-  filterContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginVertical: 20,
-  },
-
-  filterButton: {
-    backgroundColor: '#c77dff',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    flex: 1,
-    marginHorizontal: 4,
-  },
-
-  filterButtonActive: {
-    backgroundColor: '#84009A',
-  },
-
-  filterText: {
-    color: '#ffffff',
-    fontWeight: 'bold',
-    fontSize: 10,
-  },
-
-  filterIcon: {
-    marginLeft: 4,
-  },
-
-  filterPanel: {
-    padding: 14,
-    marginBottom: 20,
-    borderRadius: 12,
-    backgroundColor: '#F7F1F8',
-  },
-
-  filterPanelTitle: {
-    marginBottom: 10,
-    color: '#333333',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-
-  statusOptions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-
-  statusOption: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: '#D8C8DC',
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
-  },
-
-  statusOptionSelected: {
-    borderColor: '#84009A',
-    backgroundColor: '#84009A',
-  },
-
-  statusOptionText: {
-    color: '#555555',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-
-  statusOptionTextSelected: {
-    color: '#FFFFFF',
-  },
-
-  rangeInputs: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-
-  rangeInputGroup: {
-    flex: 1,
-  },
-
-  rangeInputLabel: {
-    marginBottom: 5,
-    color: '#666666',
-    fontSize: 12,
-  },
-
-  rangeInput: {
-    minHeight: 42,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: '#D8C8DC',
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    color: '#222222',
-    fontSize: 14,
-  },
-
-  dateFilterButton: {
-    flex: 1,
-    minHeight: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#E3DEE6',
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 14,
-  },
-
-  dateFilterLabel: {
-    marginBottom: 4,
-    color: '#8B8790',
-    fontSize: 12,
-  },
-
-  dateFilterValue: {
-    color: '#28232B',
-    fontSize: 15,
-  },
-
-  dateFilterPlaceholder: {
-    color: '#8B8790',
-    fontSize: 15,
-  },
-
-  filterError: {
-    marginTop: 8,
-    color: '#B42318',
-    fontSize: 12,
-  },
-
-  datePickerContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E3DEE6',
-    marginTop: 10,
-    overflow: 'hidden',
-  },
-
-  datePickerDone: {
-    alignItems: 'flex-end',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E8E4EA',
-  },
-
-  datePickerDoneText: {
-    color: '#84009A',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-
-  clearFiltersButton: {
-    alignSelf: 'flex-end',
-    marginTop: 10,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-  },
-
-  clearFiltersText: {
-    color: '#84009A',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-
-  emptyState: {
-    paddingVertical: 12,
-    color: '#777777',
-    fontSize: 13,
-  },
-
-  sectionHeaderContainer: {
-    marginBottom: 12,
-  },
-
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#666666',
-    letterSpacing: 0.5,
-  },
-
-  transactionItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-
-  transactionInfo: {
-    flex: 1,
-  },
-
-  transactionName: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#222222',
-    marginBottom: 2,
-  },
-
-  transactionSubText: {
-    fontSize: 12,
-    color: '#888888',
-  },
-
-  transactionRight: {
-    alignItems: 'flex-end',
-  },
-
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginBottom: 4,
-  },
-
-  badgeIcon: {
-    marginRight: 4,
-  },
-
-  badgeText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-
-  transactionAmount: {
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-});

@@ -4,8 +4,10 @@ export default function RootLayout() {
   return (
 /*     <AuthProvider>
  */      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Login" />
         <Stack.Screen name="Home" />
+        <Stack.Screen name="Financeiro" />
+        <Stack.Screen name="Agenda" />
+        <Stack.Screen name="Perfil" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen
           name="Menu"

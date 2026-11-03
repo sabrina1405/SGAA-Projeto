@@ -14,7 +14,7 @@ export const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
-
+  
   header: {
     height: 106,
     paddingHorizontal: 13,
@@ -29,10 +29,18 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
 
+  textPage: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: 'bold',
+    alignSelf: 'center',
+    paddingVertical: 14,
+  },
+
   headerText: {
     flex: 1,
   },
-
+  
   logo: {
     color: '#FFFFFF',
     fontSize: 16,
@@ -40,30 +48,30 @@ export const styles = StyleSheet.create({
     fontWeight: '400',
     marginBottom: 8,
   },
-
+  
   welcome: {
     color: '#FFFFFF',
     fontSize: 14,
     lineHeight: 18,
     fontWeight: '400',
   },
-
+  
   studentName: {
     color: '#FFFFFF',
     fontSize: 16,
     lineHeight: 21,
     fontWeight: '700',
   },
-
+  
   menuButton: {
     width: 48,
     height: 48,
-    marginTop: -2,
     justifyContent: 'center',
     alignItems: 'center',
+    alignSelf: 'center',
     borderRadius: 24,
   },
-
+  
   menuButtonPressed: {
     backgroundColor: 'rgba(255,255,255,0.14)',
   },
@@ -72,16 +80,16 @@ export const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
-
+  
   scrollContent: {
     paddingTop: 31,
     paddingBottom: 42,
   },
-
+  
   section: {
     paddingHorizontal: 10,
   },
-
+  
   sectionTitle: {
     color: '#626262',
     fontSize: 16,
@@ -90,7 +98,7 @@ export const styles = StyleSheet.create({
     marginLeft: 15,
     marginBottom: 3,
   },
-
+  
   separator: {
     height: 1,
     backgroundColor: '#BDBDBD',
@@ -98,11 +106,11 @@ export const styles = StyleSheet.create({
     marginTop: 35,
     marginBottom: 29,
   },
-
+  
   listContainer: {
-        padding: 16,
-        gap: 12,
-    },
+    padding: 16,
+    gap: 12,
+  },
 
   modalOverlay: {
     ...StyleSheet.absoluteFill,
@@ -112,6 +120,7 @@ export const styles = StyleSheet.create({
   },
 
   modalContent: {
+    flex: 1,
     width: '100%',
     paddingHorizontal: 20,
     justifyContent: 'center',
@@ -129,6 +138,7 @@ export const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.2,
     shadowRadius: 18,
+    alignSelf: 'center',
   },
 
   detailHeader: {
@@ -141,7 +151,7 @@ export const styles = StyleSheet.create({
   detailHeading: {
     flex: 1,
   },
-
+  
   detailEyebrow: {
     marginBottom: 6,
     color: '#84009A',
@@ -149,7 +159,7 @@ export const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'uppercase',
   },
-
+  
   detailTitle: {
     color: '#292929',
     fontSize: 20,

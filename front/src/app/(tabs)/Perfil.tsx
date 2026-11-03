@@ -1,0 +1,522 @@
+import React, { useState, useEffect } from 'react';
+import { Text, View, SafeAreaView, ScrollView, TextInput, Pressable, Image, StatusBar, ActivityIndicator, Alert, StyleSheet, } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Feather, Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import { atualizarPerfilAluno, obterPerfilAluno } from '@/services/api';
+
+export default function PerfilScreen() {
+  const [loading, setLoading] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+
+  // Estados dos campos do formulário
+  const [foto, setFoto] = useState<string | null>(null);
+  const [nomeCompleto, setNomeCompleto] = useState('');
+  const [dataNascimento, setDataNascimento] = useState('');
+  const [cpf, setCpf] = useState('');
+  const [email, setEmail] = useState('');
+  const [telefone, setTelefone] = useState('');
+  const [responsaveis, setResponsaveis] = useState('');
+  const [cpfResponsaveis, setCpfResponsaveis] = useState('');
+  const [telefoneResponsaveis, setTelefoneResponsaveis] = useState('');
+  const [menorDeIdade, setMenorDeIdade] = useState(false);
+  const idioma = 'Português';
+
+  // Buscar dados do back-end ao carregar a tela
+  useEffect(() => {
+    let active = true;
+
+    async function fetchPerfil() {
+      try {
+        const data = await obterPerfilAluno();
+        if (!active) return;
+
+        setNomeCompleto(data.nome_completo);
+        setDataNascimento(data.perfil.data_nascimento);
+        setMenorDeIdade(data.perfil.possui_responsavel);
+        setCpf(data.perfil.cpf ?? '');
+        setEmail(data.email);
+        setTelefone(data.perfil.telefone ?? '');
+        setResponsaveis(data.perfil.responsavel_nome ?? '');
+        setCpfResponsaveis(data.perfil.responsavel_cpf ?? '');
+        setTelefoneResponsaveis(data.perfil.responsavel_telefone ?? '');
+      } catch (error) {
+        console.error(error);
+        if (active) {
+          Alert.alert(
+            'Erro',
+            error instanceof Error
+              ? error.message
+              : 'Não foi possível carregar os dados do usuário.',
+          );
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    void fetchPerfil();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Função para selecionar/fazer upload da foto
+  const handleSelecionarFoto = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (!permissionResult.granted) {
+      Alert.alert('Permissão negada', 'Precisamos de permissão para acessar sua galeria de fotos.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      setFoto(result.assets[0].uri);
+    }
+  };
+
+  const handleSalvar = async () => {
+    setSalvando(true);
+    try {
+      const payload = menorDeIdade
+        ? {
+          nome_completo: nomeCompleto,
+          responsavel_nome: responsaveis,
+          responsavel_cpf: cpfResponsaveis,
+          responsavel_telefone: telefoneResponsaveis,
+        }
+        : {
+          nome_completo: nomeCompleto,
+          telefone,
+        };
+      const data = await atualizarPerfilAluno(payload);
+
+      setNomeCompleto(data.nome_completo);
+      setEmail(data.email);
+      setDataNascimento(data.perfil.data_nascimento);
+      setMenorDeIdade(data.perfil.possui_responsavel);
+      setCpf(data.perfil.cpf ?? '');
+      setTelefone(data.perfil.telefone ?? '');
+      setResponsaveis(data.perfil.responsavel_nome ?? '');
+      setCpfResponsaveis(data.perfil.responsavel_cpf ?? '');
+      setTelefoneResponsaveis(data.perfil.responsavel_telefone ?? '');
+
+      Alert.alert(
+        'Sucesso',
+        'Dados do perfil atualizados. Foto e idioma ainda não são suportados pela API.',
+      );
+      router.back();
+    } catch (error) {
+      console.error(error);
+      Alert.alert(
+        'Erro',
+        error instanceof Error ? error.message : 'Não foi possível salvar as alterações.',
+      );
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const handleCancelar = () => {
+    router.back();
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color="#980070" />
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#7B0087" />
+
+      {/* Header padrão */}
+      <LinearGradient
+        colors={['#7B0087', '#980070', '#C40E35']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >        
+      <View style={styles.headerContent}>
+        <View style={styles.headerText}>
+          <Text style={styles.textPage}>Perfil</Text>
+        </View>
+          <Pressable onPress={() => router.push('/Menu')} hitSlop={12}>
+            <Feather name="menu" size={28} color="#FFFFFF" />
+          </Pressable>
+        </View>
+      </LinearGradient>
+
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        
+        {/* Upload de Imagem no lugar do Círculo */}
+        <View style={styles.uploadContainer}>
+          <Pressable onPress={handleSelecionarFoto} style={styles.avatarWrapper}>
+            {foto ? (
+              <Image source={{ uri: foto }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Ionicons name="camera-outline" size={32} color="#FFFFFF" />
+              </View>
+            )}
+            <View style={styles.cameraIconBadge}>
+              <Feather name="edit-2" size={14} color="#FFFFFF" />
+            </View>
+          </Pressable>
+          <Text style={styles.profileNameText}>{nomeCompleto || 'Nome do Usuário'}</Text>
+        </View>            
+        <View style={styles.sectionHeading}>
+          <Feather name="user" size={30} color="#84009A" />
+          <Text style={styles.sectionTitle}>Dados Pessoais</Text>
+        </View>
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Nome Completo</Text>
+          <TextInput
+            style={styles.input}
+            value={nomeCompleto}
+            onChangeText={setNomeCompleto}
+            placeholder="Digite seu nome completo"
+            placeholderTextColor="#8B8790"
+            />
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Data de nascimento</Text>
+          <View style={styles.inputWithIcon}>
+            <TextInput
+              style={styles.dateInput}
+              value={dataNascimento}
+                editable={false}
+              placeholder="DD/MM/AAAA"
+              placeholderTextColor="#8B8790"
+            />
+            <Feather name="calendar" size={20} color="#84009A" style={styles.calendarIcon} />
+          </View>
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>E-mail</Text>
+          <TextInput
+            style={styles.input}
+            value={email}
+            editable={false}
+            placeholder="seu@email.com"
+            keyboardType="email-address"
+          />
+        </View>
+
+        {!menorDeIdade && (
+          <>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>CPF</Text>
+              <TextInput
+                style={styles.input}
+                value={cpf}
+                editable={false}
+                placeholder="000.000.000-00"
+                keyboardType="numeric"
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Telefone</Text>
+              <TextInput
+                style={styles.input}
+                value={telefone}
+                onChangeText={setTelefone}
+                placeholder="(00) 00000-0000"
+                keyboardType="phone-pad"
+              />
+            </View>
+          </>
+        )}
+
+        {menorDeIdade && (
+          <>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Responsáveis</Text>
+              <TextInput
+                style={styles.input}
+                value={responsaveis}
+                onChangeText={setResponsaveis}
+                placeholder="Nome dos responsáveis"
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>CPF Responsáveis</Text>
+              <TextInput
+                style={styles.input}
+                value={cpfResponsaveis}
+                onChangeText={setCpfResponsaveis}
+                placeholder="000.000.000-00"
+                keyboardType="numeric"
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Telefone Responsáveis</Text>
+              <TextInput
+                style={styles.input}
+                value={telefoneResponsaveis}
+                onChangeText={setTelefoneResponsaveis}
+                placeholder="(00) 00000-0000"
+                keyboardType="phone-pad"
+              />
+            </View>
+          </>
+        )}
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Idioma de Preferência do App</Text>
+          <View style={styles.selectBox}>
+            <Text style={styles.selectText}>{idioma}</Text>
+            <Feather name="chevron-down" size={20} color="#333" />
+          </View>
+        </View>
+
+        <View style={styles.actionButtonsContainer}>
+          <Pressable 
+            style={[styles.button, styles.cancelButton]} 
+            onPress={handleCancelar}
+            disabled={salvando}
+          >
+            <Text style={styles.cancelButtonText}>Cancelar</Text>
+          </Pressable>
+
+          <Pressable 
+            style={[styles.button, styles.saveButton]} 
+            onPress={handleSalvar}
+            disabled={salvando}
+          >
+            <LinearGradient
+              start={{ x: 0.65, y: 0 }}
+              end={{ x: 0.35, y: 1 }}
+              colors={['rgba(99, 162, 86, 1)', 'rgba(8, 71, 25, 1)']}
+              locations={[0.12, 1.0]}
+              pointerEvents="none"
+              style={styles.saveGradient}
+            />
+            {salvando ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text style={styles.saveButtonText}>Salvar</Text>
+            )}
+          </Pressable>
+
+        </View>
+
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  center: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  header: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+    
+  headerText: {
+    flex: 1,
+  },
+  
+  textPage: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: 'bold',
+    alignSelf: 'center',
+    paddingVertical: 14,
+  },
+  
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+
+  uploadContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+
+  avatarWrapper: {
+    position: 'relative',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    marginBottom: 8,
+  },
+
+  avatarImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+  },
+
+  avatarPlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#C481D0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  cameraIconBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#7B0087',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+
+  profileNameText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333333',
+  },
+
+  sectionHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E8E4EA',
+    paddingBottom: 11,
+    marginBottom: 16,
+  },
+  
+  sectionTitle: {
+    color: '#342C38',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  
+  formGroup: {
+    marginBottom: 16,
+  },
+
+  label: {
+    color: '#514A55',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 7,
+  },
+
+  input: {    
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: '#E3DEE6',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    color: '#28232B',
+    fontSize: 15,
+    marginBottom: 16,
+  },
+
+  inputWithIcon: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E3DEE6',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+  },
+  dateInput: {
+    flex: 1,
+    minHeight: 46,
+    paddingVertical: 10,
+    color: '#28232B',
+    fontSize: 15,
+  },
+  calendarIcon: {
+    marginRight: 2,
+  },
+  selectBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 48,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E3DEE6',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+  },
+  selectText: {
+    fontSize: 15,
+    color: '#28232B',
+  },
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 24,
+    gap: 12,
+  },
+  button: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#C40E35',
+    borderWidth: 1,
+    borderColor: '#C40E35',
+  },
+  saveButton: {
+    overflow: 'hidden',
+    backgroundColor: '#1B8D33',
+  },
+  cancelButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+
+  saveGradient: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: 8,
+  },
+
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+});

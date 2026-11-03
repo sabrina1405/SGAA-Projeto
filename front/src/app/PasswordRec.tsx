@@ -2,19 +2,13 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Fontisto, Feather, Ionicons } from '@expo/vector-icons';
-import {styles} from '@/screens/Home/login.styles';
+import {styles} from '@/screens/Login/login.styles';
+import { getPasswordRules } from '@/utils/passwordRules';
 
 export default function PasswordRecover(){
   const [showPassword, setShowPassword] = useState(false);
   const [password, setPassword] = useState('');
-  const specialCharacterCount = (password.match(/[^A-Za-z0-9\s]/g) ?? []).length;
-  const passwordRules = [
-    { label: 'Mínimo 6 caracteres', valid: password.length >= 6 },
-    { label: 'Máximo 100 caracteres', valid: password.length > 0 && password.length <= 100 },
-    { label: '1 caractere maiúsculo', valid: /[A-Z]/.test(password) },
-    { label: '1 caractere minúsculo', valid: /[a-z]/.test(password) },
-    { label: '2 caracteres especiais', valid: specialCharacterCount >= 2 },
-  ];
+  const passwordRules = getPasswordRules(password);
   const validRulesCount = passwordRules.filter((rule) => rule.valid).length;
   const progress = (validRulesCount / passwordRules.length) * 100;
   const progressColor = password.length === 0
@@ -46,9 +40,9 @@ return(
     end={{ x: 0.9, y: 1 }}
     style={styles.card}
   >
-    <View style={styles.logo} />
-
-    <Text style={styles.title}>SGAA</Text>
+    <View style={styles.logo}>
+      <Text style={styles.logoText}>SGAA</Text>
+    </View>
 
     <Text style={styles.subtitle}>
       Sistema de gerenciamento de Aulas e Agendamentos

@@ -1,50 +1,50 @@
 import { SafeAreaView, ScrollView, StyleSheet, Text, View, Pressable, } from 'react-native';
-import { useRef, useState } from 'react';
-import styles from '@/screens/Home/home.styles';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { styles } from '@/screens/Home/home.styles';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurTargetView, BlurView } from 'expo-blur';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { List_item, StatusConfig, type ListItemCategory, type ListItemStatus, } from '@/components/list_item';
+import { obterDadosHome } from '@/services/api';
 
-const mockData = [
-    {
-        id: "1",
-        titulo: "Introdução ao React Native",
-        categoria: "Aula" as const,
-        descricao: "Explicação sobre componentes e props.",
-        dataHora: "01/11/26 as 14:00",
-        nomeAluno: "Carlos Silva",
-        status: "proxima" as const,
-    },
-    {
-        id: "2",
-        titulo: "Exercício de Fixação - Flexbox",
-        categoria: "Atividade" as const,
-        descricao: "Criar um layout utilizando alinhamentos.",
-        dataHora: "02/11/26 as 10:30",
-        nomeAluno: "Ana Souza",
-        status: "proxima" as const,
-    },
-    {
-        id: "3",
-        titulo: "Mensalidade - Novembro",
-        categoria: "Pagamento" as const,
-        descricao: "Referente ao plano mensal.",
-        dataHora: "Vencimento em 10/11",
-        nomeAluno: "Marcos Lima",
-        status: "proxima" as const,
-    },
-    {
-        id: "4",
-        titulo: "Aula de Navegação (Stack)",
-        categoria: "Aula" as const,
-        descricao: "Entendendo rotas e parâmetros.",
-        dataHora: "02/11/26 as 16:00",
-        nomeAluno: "Juliana Pereira",
-        status: "proxima" as const,
-    },
-];
+interface HomeItem {
+  id: string;
+  titulo: string;
+  categoria: ListItemCategory;
+  descricao: string;
+  dataHora: string;
+  nomeAluno?: string;
+  status: ListItemStatus;
+}
+
+interface LoadedHomeData {
+  items: HomeItem[];
+  studentName: string;
+}
+
+function formatApiDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`Data inválida recebida pela API: ${value}`);
+  }
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatApiDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) {
+    throw new Error(`Data inválida recebida pela API: ${value}`);
+  }
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+    .toLocaleDateString('pt-BR');
+}
 
 const statusLabels: Record<ListItemStatus, string> = {
   vencida: 'Vencida',
@@ -52,14 +52,91 @@ const statusLabels: Record<ListItemStatus, string> = {
   realizada: 'Realizada',
 };
 
-type HomeItem = (typeof mockData)[number];
-
 export default function HomeScreen() {
   const blurTargetRef = useRef<View | null>(null);
   const [selectedItem, setSelectedItem] = useState<HomeItem | null>(null);
+  const [items, setItems] = useState<HomeItem[]>([]);
+  const [studentName, setStudentName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadHome = useCallback(async (): Promise<LoadedHomeData> => {
+    const data = await obterDadosHome();
+    const nextItems: HomeItem[] = [
+        ...data.aulas.map((aula) => ({
+          id: String(aula.id),
+          titulo: aula.titulo,
+          categoria: 'Aula' as const,
+          descricao: aula.descricao,
+          dataHora: formatApiDateTime(aula.data_hora),
+          nomeAluno: aula.nome_aluno ?? undefined,
+          status: aula.status,
+        })),
+        ...data.atividades.map((atividade) => ({
+          id: String(atividade.id),
+          titulo: atividade.titulo,
+          categoria: 'Atividade' as const,
+          descricao: atividade.descricao,
+          dataHora: formatApiDateTime(atividade.data_hora),
+          nomeAluno: atividade.nome_aluno ?? undefined,
+          status: atividade.status,
+        })),
+        ...data.pagamentos.map((pagamento) => ({
+          id: String(pagamento.id),
+          titulo: pagamento.titulo,
+          categoria: 'Pagamento' as const,
+          descricao: pagamento.descricao ?? '',
+          dataHora: `Vencimento em ${formatApiDate(pagamento.data_vencimento)}`,
+          nomeAluno: pagamento.nome_aluno ?? undefined,
+          status: pagamento.status,
+        })),
+    ];
+    return { items: nextItems, studentName: data.usuario.nome_completo };
+  }, []);
+
+  const handleHomeError = useCallback((error: unknown) => {
+    console.error('Erro ao carregar dados da tela inicial:', error);
+    setLoadError(
+      error instanceof Error
+        ? error.message
+        : 'Não foi possível carregar os dados. Tente novamente.',
+    );
+  }, []);
+
+  const applyHomeData = useCallback((data: LoadedHomeData) => {
+    setItems(data.items);
+    setStudentName(data.studentName);
+  }, []);
+
+  const retryHome = () => {
+    setLoading(true);
+    setLoadError(null);
+    void loadHome()
+      .then(applyHomeData)
+      .catch(handleHomeError)
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    let active = true;
+    loadHome()
+      .then((data) => {
+        if (active) applyHomeData(data);
+      })
+      .catch((error: unknown) => {
+        if (active) handleHomeError(error);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [applyHomeData, handleHomeError, loadHome]);
 
   const renderItems = (categoria: ListItemCategory) =>
-    mockData
+    items
       .filter((item) => item.categoria === categoria)
       .map((item) => (
         <List_item
@@ -100,7 +177,7 @@ export default function HomeScreen() {
                   </Text>
 
                   <Text style={styles.studentName}>
-                    Ola, Aluno
+                    Olá, {studentName || 'Aluno'}
                   </Text>
                 </View>
 
@@ -124,32 +201,37 @@ export default function HomeScreen() {
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
             >
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>
-                  PRÓXIMAS AULAS
-                </Text>
+              {loading ? (
+                <Text style={styles.sectionTitle}>Carregando dados...</Text>
+              ) : loadError ? (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>{loadError}</Text>
+                  <Pressable onPress={retryHome} accessibilityRole="button">
+                    <Text>Tentar novamente</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>PRÓXIMAS AULAS</Text>
+                    <View style={styles.listContainer}>{renderItems('Aula')}</View>
+                  </View>
 
-                <View style={styles.listContainer}>{renderItems('Aula')}</View>
-              </View>
+                  <View style={styles.separator} />
 
-              <View style={styles.separator} />
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>PRÓXIMAS ATIVIDADES</Text>
+                    <View style={styles.listContainer}>{renderItems('Atividade')}</View>
+                  </View>
 
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>
-                  PRÓXIMAS ATIVIDADES
-                </Text>
+                  <View style={styles.separator} />
 
-                <View style={styles.listContainer}>{renderItems('Atividade')}</View>
-              </View>
-
-              <View style={styles.separator} />
-
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>
-                  PRÓXIMOS PAGAMENTOS
-                </Text>
-                <View style={styles.listContainer}>{renderItems('Pagamento')}</View>
-              </View>
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>PRÓXIMOS PAGAMENTOS</Text>
+                    <View style={styles.listContainer}>{renderItems('Pagamento')}</View>
+                  </View>
+                </>
+              )}
             </ScrollView>
           </View>
         </SafeAreaView>

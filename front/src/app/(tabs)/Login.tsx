@@ -1,13 +1,61 @@
+
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Pressable } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { Fontisto, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { entrar } from '@/services/api';
 
 export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isStudentLogin, setIsStudentLogin] = useState(false);
-    const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const router = useRouter();
+
+  const selectedProfile = isStudentLogin ? 'aluno' : 'professor';
+
+  const handleLogin = async () => {
+    if (!email.trim() || !password) {
+      Alert.alert('Dados incompletos', 'Informe seu e-mail e sua senha.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await entrar(email.trim(), password, selectedProfile);
+      router.replace('/Home');
+    } catch (error) {
+      console.error('Erro ao entrar:', error);
+      Alert.alert(
+        'Não foi possível entrar',
+        error instanceof Error
+          ? error.message
+          : 'Verifique sua conexão e tente novamente.',
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleFirstAccess = () => {
+    router.push({
+      pathname: '/FirstAccess',
+      params: { perfil: selectedProfile },
+    });
+  };
 
   return (
     <View style={styles.container}>
@@ -23,142 +71,178 @@ export default function LoginScreen() {
         end={{ x: 0.9, y: 1 }}
         style={styles.card}
       >
-        {isStudentLogin ? (
-          <>
-
         <View style={styles.logo}>
           <Text style={styles.logoText}>SGAA</Text>
         </View>
 
-        <Text style={styles.subtitleStudent}>
+        <Text style={styles.subtitle}>
           Sistema de gerenciamento de Aulas e Agendamentos
         </Text>
 
-            <Pressable 
-            style={[styles.studentButton, {marginBottom: 28 }]}
-            onPress={() => setIsStudentLogin(false)}
+        <View style={styles.roleButtonsContainer}>
+
+          <Pressable
+            style={[
+              styles.roleButton,
+              isStudentLogin
+                ? styles.roleButtonSelected
+                : styles.roleButtonUnselected,
+            ]}
+            onPress={() => setIsStudentLogin(true)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isStudentLogin }}
+            accessibilityLabel="Acessar como aluno"
+          >
+            <Ionicons
+              name="school-outline"
+              size={23}
+              color={isStudentLogin ? '#ffff' : '#84009A'}
+            />
+
+            <Text
+              style={[
+                styles.roleButtonTitle,
+                isStudentLogin && styles.roleButtonTitleSelected,
+              ]}
             >
-              <Text style={styles.studentButtonText}>Acessar Área do Professor</Text>
-            </Pressable>
-
-            <View style={styles.inputContainer}>
-              <Fontisto name="email" size={20} color="#666" />
-              <TextInput
-                placeholder="E-mail"
-                placeholderTextColor="#666"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                style={styles.input}
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={20} color="#666" />
-              <TextInput
-                placeholder="Senha"
-                placeholderTextColor="#666"
-                secureTextEntry={!showPassword}
-                style={styles.input}
-              />
-              <View style={styles.separator} />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons
-                  name={showPassword ? 'eye-outline' : 'eye-off-outline'}
-                  size={20}
-                  color="#666"
-                />
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity 
-            style={styles.recoverContainer}
-            onPress={() => router.push('/PasswordRec')}
-            >
-
-              <Text style={styles.recover}>Recuperar senha</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity>
-              <LinearGradient
-                start={{ x: 0.65, y: 0 }}
-                end={{ x: 0.35, y: 1 }}
-                colors={['rgba(99, 162, 86, 1)', 'rgba(8, 71, 25, 1)']}
-                locations={[0.12, 1.0]}
-                style={styles.loginButton}
-              >
-                <Text style={styles.loginText}>Entrar</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-
-        <View style={styles.logo}>
-          <Text style={styles.logoText}>SGAA</Text>
-        </View>
-
-            <Text style={styles.subtitle}>
-              Sistema de gerenciamento de Aulas e Agendamentos
+              Aluno
             </Text>
 
-            <TouchableOpacity
-              style={styles.studentButton}
-              onPress={() => setIsStudentLogin(true)}
+            <Text
+              style={[
+                styles.roleButtonSubtitle,
+                isStudentLogin && styles.roleButtonSubtitleSelected,
+              ]}
             >
-              <Text style={styles.studentButtonText}>Acessar Área do Aluno</Text>
-            </TouchableOpacity>
+              Acessar minha área
+            </Text>
+          </Pressable>
 
-            <TouchableOpacity onPress={() => router.push('/FirstAcess')}>
-              <Text style={styles.firstAccess}>Primeiro Acesso - Professores</Text>
-            </TouchableOpacity>
+          <Pressable
+            style={[
+              styles.roleButton,
+              !isStudentLogin
+                ? styles.roleButtonSelected
+                : styles.roleButtonUnselected,
+            ]}
+            onPress={() => setIsStudentLogin(false)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: !isStudentLogin }}
+            accessibilityLabel="Acessar como professor"
+          >
+            <Ionicons
+              name="person-outline"
+              size={23}
+              color={!isStudentLogin ? '#FFF' : '#84009A'}
+            />
 
-            <View style={styles.inputContainer}>
-              <Fontisto name="email" size={20} color="#666" />
-              <TextInput
-                placeholder="E-mail"
-                placeholderTextColor="#666"
-                style={styles.input}
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={20} color="#666" />
-              <TextInput
-                placeholder="Senha"
-                placeholderTextColor="#666"
-                secureTextEntry={!showPassword}
-                style={styles.input}
-              />
-              <View style={styles.separator} />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons
-                  name={showPassword ? 'eye-outline' : 'eye-off-outline'}
-                  size={20}
-                  color="#666"
-                />
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity 
-            style={styles.recoverContainer}
-            onPress={() => router.push('/PasswordRec')}
+            <Text
+              style={[
+                styles.roleButtonTitle,
+                !isStudentLogin && styles.roleButtonTitleSelected,
+              ]}
             >
-              <Text style={styles.recover}>Recuperar senha</Text>
-            </TouchableOpacity>
+              Professor
+            </Text>
 
-            <TouchableOpacity>
-              <LinearGradient
-                start={{ x: 0.65, y: 0 }}
-                end={{ x: 0.35, y: 1 }}
-                colors={['rgba(99, 162, 86, 1)', 'rgba(8, 71, 25, 1)']}
-                locations={[0.12, 1.0]}
-                style={styles.loginButton}
-              >
-                <Text style={styles.loginText}>Entrar</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </>
-        )}
+            <Text
+              style={[
+                styles.roleButtonSubtitle,
+                !isStudentLogin && styles.roleButtonSubtitleSelected,
+              ]}
+            >
+              Acessar minha área
+            </Text>
+          </Pressable>
+
+        </View>
+
+        <TouchableOpacity
+          style={styles.firstAccessContainer}
+          onPress={handleFirstAccess}
+          accessibilityRole="button"
+          accessibilityLabel={`Primeiro acesso como ${selectedProfile}. Cadastre-se.`}
+        >
+          <Text style={styles.firstAccessText}>
+            Primeiro acesso como {selectedProfile}?{' '}
+          </Text>
+
+          <Text style={styles.firstAccessLink}>
+            Cadastre-se
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.inputContainer}>
+          <Fontisto name="email" size={20} color="#666" />
+
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            placeholder="E-mail"
+            placeholderTextColor="#666"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            style={styles.input}
+          />
+        </View>
+
+        <View style={styles.inputContainer}>
+          <Ionicons
+            name="lock-closed-outline"
+            size={20}
+            color="#666"
+          />
+
+          <TextInput
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Senha"
+            placeholderTextColor="#666"
+            secureTextEntry={!showPassword}
+            style={styles.input}
+          />
+
+          <View style={styles.separator} />
+
+          <TouchableOpacity
+            onPress={() => setShowPassword(!showPassword)}
+            accessibilityRole="button"
+            accessibilityLabel={
+              showPassword ? 'Ocultar senha' : 'Mostrar senha'
+            }
+          >
+            <Ionicons
+              name={showPassword ? 'eye-outline' : 'eye-off-outline'}
+              size={20}
+              color="#666"
+            />
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity
+          style={styles.recoverContainer}
+          onPress={() => router.push('/PasswordRec')}
+        >
+          <Text style={styles.recover}>
+            Recuperar senha
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity disabled={isSubmitting} onPress={handleLogin}>
+          <LinearGradient
+            start={{ x: 0.65, y: 0 }}
+            end={{ x: 0.35, y: 1 }}
+            colors={['rgba(99, 162, 86, 1)', 'rgba(8, 71, 25, 1)']}
+            locations={[0.12, 1.0]}
+            style={styles.loginButton}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.loginText}>Entrar</Text>
+            )}
+          </LinearGradient>
+        </TouchableOpacity>
 
       </LinearGradient>
     </View>
@@ -173,17 +257,18 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
   },
 
   logo: {
-      width: 64,
-      height: 64,
-      alignSelf: 'center',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: '#F3EAF5',
-      borderRadius: 18,
+    width: 64,
+    height: 64,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3EAF5',
+    borderRadius: 18,
+    marginBottom: 18,
   },
 
   logoText: {
@@ -193,60 +278,83 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
 
-  title: {
-    color: '#fff',
-    fontSize: 25,
-    fontWeight: 400,
-    fontFamily: 'sans-serif'
-  },
-
   subtitle: {
     color: '#fff',
     fontSize: 14,
-    paddingVertical: 28,
+    paddingVertical: 20,
     fontFamily: 'sans-serif',
-    fontWeight: 300,
+    fontWeight: '300',
   },
 
-  subtitleStudent: {
-    color: '#fff',
-    fontSize: 14,
-    paddingVertical: 28,
-    fontFamily: 'sans-serif',
-    fontWeight: 300,
-  },
 
-  studentButton: {
+  roleButtonsContainer: {
     width: '82%',
-    margin: 10,
-    height: 40,
-    backgroundColor: '#8A007A',
-    borderRadius: 6,
+    flexDirection: 'row',
+    gap: 10,
+  },
+
+  roleButton: {
+    flex: 1,
+    minHeight: 76,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    borderRadius: 12,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'visible',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 3
-    },
-    shadowOpacity: 0.4,
-    shadowRadius: 4,
-    elevation: 6,
+    gap: 3,
   },
 
-  studentButtonText: {
-    color: '#fff',
+  roleButtonSelected: {
+    backgroundColor: 'rgba(132, 0, 154, 0.35)',
+    borderColor: 'rgba(255, 255, 255, 0.65)',
+  },
+  
+  roleButtonUnselected: {
+    backgroundColor: '#F3EAF5',
+    borderColor: '#FFFFFF',
+  },
+
+  roleButtonTitle: {
+    color: '#84009A',
+    fontSize: 14,
     fontWeight: '700',
-    fontSize: 18,
   },
 
-  firstAccess: {
+  roleButtonTitleSelected: {
+    color: '#FFF',
+  },
+
+  roleButtonSubtitle: {
+    color: '#84009A',
+    fontSize: 10,
+    textAlign: 'center',
+  },
+
+  roleButtonSubtitleSelected: {
     color: '#ffff',
-    marginTop: 14,
-    marginBottom: 18,
+  },
+
+
+  firstAccessContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    marginBottom: 16,
+    paddingVertical: 4,
+  },
+
+  firstAccessText: {
+    color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: 400,
+  },
+
+  firstAccessLink: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
 
   inputContainer: {
@@ -257,7 +365,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 18,
-    marginBottom: 20,
+    marginBottom: 16,
 
     shadowColor: '#000',
     shadowOffset: {
@@ -283,7 +391,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
 
-  recoverContainer:{
+  recoverContainer: {
     display: 'flex',
     width: '80%',
     alignItems: 'flex-end',
