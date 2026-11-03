@@ -51,7 +51,7 @@ export default function FinanceiroScreen() {
           <View style={styles.atalhosContainer}>
             <Pressable
               style={({ pressed }) => [styles.cardAtalho, pressed && styles.pressionado]}
-              onPress={() => router.push('./fluxoDeCaixa')}
+              onPress={() => router.push('./financeiro/fluxoDeCaixa')}
             >
               <Ionicons name="bar-chart-outline" size={22} color={palette.header} />
               <View style={styles.textosAtalho}>
@@ -63,7 +63,7 @@ export default function FinanceiroScreen() {
 
             <Pressable
               style={({ pressed }) => [styles.cardAtalho, pressed && styles.pressionado]}
-              onPress={() => router.push('./relatorioFinanceiro')}
+              onPress={() => router.push('./financeiro/relatorioFinanceiro')}
             >
               <Ionicons name="document-text-outline" size={22} color={palette.header} />
               <View style={styles.textosAtalho}>
