@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import { Pressable } from 'react-native';
+import { headerComMenu } from '@/features/menu/header-options';
 
 import { palette } from '@/constants/palette';
 
@@ -13,6 +14,7 @@ export default function InformacoesAlunoLayout() {
         headerStyle: { backgroundColor: palette.header },
         headerTintColor: '#ffffff',
         headerTitleStyle: { fontWeight: '600' },
+        ...headerComMenu,
       }}
     >
       <Stack.Screen
@@ -28,16 +30,6 @@ export default function InformacoesAlunoLayout() {
               style={{ marginRight: 16 }}
             >
               <Ionicons name="chevron-back" size={24} color="#ffffff" />
-            </Pressable>
-          ),
-          headerRight: () => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Menu"
-              onPress={() => {}}
-              style={{ marginLeft: 16 }}
-            >
-              <Ionicons name="menu" size={24} color="#ffffff" />
             </Pressable>
           ),
         }}

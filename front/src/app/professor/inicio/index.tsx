@@ -15,9 +15,6 @@ export default function InicioScreen() {
                         <Text style={styles.logoText}>Logo</Text>
                         <Text style={styles.welcomeSubtitle}>Seja Bem-Vindo(a) de volta</Text>
                     </View>
-                    <Pressable accessibilityRole="button" accessibilityLabel="Menu" onPress={() => { }}>
-                        <Ionicons name="menu" size={26} color="#ffffff" />
-                    </Pressable>
                 </View>
                 <Text style={styles.userName}>Olá, Professora</Text>
             </View>
@@ -106,7 +103,7 @@ const styles = StyleSheet.create({
     /* Cabeçalho */
     headerContainer: {
         backgroundColor: palette.header,
-        paddingTop: 48,
+        paddingTop: 16,
         paddingHorizontal: 20,
         paddingBottom: 24,
         borderBottomLeftRadius: 20,
