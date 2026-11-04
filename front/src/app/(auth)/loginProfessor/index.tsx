@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, Text, View, TextInput, Pressable, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { login, mensagemDeErro } from '@/features/auth/authService';
 import { palette } from '@/constants/palette';
 
 export default function LoginScreen() {
@@ -11,6 +12,25 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState('');
+
+  async function entrar() {
+    if (!email.trim() || !senha) {
+      setErro('Informe o e-mail e a senha.');
+      return;
+    }
+    setErro('');
+    setCarregando(true);
+    try {
+      await login({ email, senha });
+      router.replace('../professor');
+    } catch (e) {
+      setErro(mensagemDeErro(e));
+    } finally {
+      setCarregando(false);
+    }
+  }
 
   return (
     <KeyboardAvoidingView 
@@ -90,13 +110,23 @@ export default function LoginScreen() {
               <Text style={styles.recuperarSenhaTexto}>Esqueceu sua senha?</Text>
             </Pressable>
 
+            {/* Mensagem de erro */}
+            {erro ? <Text style={styles.erroTexto}>{erro}</Text> : null}
+
             {/* Botão Entrar */}
             <Pressable 
               style={({ pressed }) => [styles.btnEntrar, pressed && styles.pressionado]}
-              onPress={() => router.push('../professor')}
+              onPress={entrar}
+              disabled={carregando}
             >
-              <Text style={styles.btnEntrarTexto}>Entrar no Sistema</Text>
-              <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+              {carregando ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Text style={styles.btnEntrarTexto}>Entrar no Sistema</Text>
+                  <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+                </>
+              )}
             </Pressable>
 
           </View>
@@ -229,6 +259,13 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.85)',
     fontSize: 12,
     fontWeight: '500',
+  },
+
+  /* Mensagem de erro */
+  erroTexto: {
+    color: '#FECACA',
+    fontSize: 12,
+    textAlign: 'center',
   },
 
   /* Botão Entrar */
