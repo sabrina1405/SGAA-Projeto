@@ -1,8 +1,9 @@
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from src.core.errors import MENSAGEM_ERRO_INTERNO, registrar_tratadores
-from src.main import app
+from src.main import app, rotas_da_documentacao
 
 client = TestClient(app)
 
@@ -52,6 +53,18 @@ def test_erro_nao_tratado_responde_500_sem_expor_a_excecao():
     assert resposta.status_code == 500
     assert resposta.json() == _erro(MENSAGEM_ERRO_INTERNO)
     assert "detalhe interno" not in resposta.text
+
+
+@pytest.mark.parametrize(
+    ("ambiente", "status"),
+    [("prod", 404), ("homolog", 200), ("dev", 200), (None, 200)],
+)
+@pytest.mark.parametrize(
+    "caminho", ["/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"]
+)
+def test_documentacao_so_fica_fora_do_ar_em_prod(ambiente, status, caminho):
+    aplicacao = FastAPI(**rotas_da_documentacao(ambiente))
+    assert TestClient(aplicacao).get(caminho).status_code == status
 
 
 def test_swagger_documenta_o_envelope():

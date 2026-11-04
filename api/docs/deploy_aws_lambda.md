@@ -62,6 +62,11 @@ Cada ambiente tem os parâmetros em `/<ambiente>/<nome>`, com o **nome do campo 
 | `push_backend` | String | Sim | `expo` |
 | `expo_access_token` | SecureString | Se o projeto Expo exigir | Ver [Notificações Push](notificacoes_push.md#configuração) |
 | `logfire_token` | SecureString | Não | Token de escrita do Logfire |
+| `drive_backend` | String | Sim | `google`. Ver [Google Drive](google_drive.md) |
+| `google_drive_client_id` | String | Sim | Do cliente OAuth |
+| `google_drive_client_secret` | SecureString | Sim | Do cliente OAuth |
+| `google_drive_refresh_token` | SecureString | Sim | Gerado por `src/scripts/gerar_token_drive.py` |
+| `google_drive_pasta_id` | String | Sim | Pasta do Drive, diferente em cada ambiente |
 | `jwt_expira_dias`, `codigo_expira_minutos`, `convite_expira_horas` | String | Não | Só para mudar os padrões |
 
 **Como criar cada parâmetro**, no console: *Systems Manager → Parameter Store → Create parameter*, na região `us-east-1`.
@@ -80,7 +85,7 @@ Comece por homolog; prod pode ficar para quando for publicar lá. O nome de um p
 
 **Variáveis definidas pelo template**, fora do Parameter Store:
 - `SSM_PREFIXO` (`/homolog/` ou `/prod/`);
-- `AMBIENTE` (`homolog` ou `prod`), que aparece em `/api/health` e no Logfire.
+- `AMBIENTE` (`homolog` ou `prod`), que aparece em `/api/health` e no Logfire. Em `prod`, também tira do ar `/docs`, `/redoc` e `/openapi.json`.
 
 **Quando um parâmetro muda:**
 - **Lido pela API:** vale nas instâncias novas. Para valer na hora, publique de novo ou mude a configuração da função no console.
@@ -178,7 +183,8 @@ Requisitos na máquina: Docker e o Poetry, com o plugin `poetry-plugin-export`. 
 
 - Pela `UrlApi`:
   - `GET /api/health` mostra o `environment` do ambiente;
-  - login, `GET /v1/auth/me` e uma listagem respondem normalmente.
+  - login, `GET /v1/auth/me` e uma listagem respondem normalmente;
+  - `GET /docs` responde `200` em homolog e `404` em prod.
 - `GET <UrlFunction>api/health`, sem passar pelo CloudFront, responde `403`.
-- O log group `/sgaa/api-tarefa-<amb>` mostra uma execução a cada 5 minutos, como `{"enviadas": 0, "recibos_conferidos": 0}`.
+- O log group `/sgaa/api-tarefa-<amb>` mostra uma execução a cada 5 minutos, como `{"enviadas": 0, "recibos_conferidos": 0, "arquivos_removidos": 0}`.
 - *Billing → Bills* segue em US$ 0.

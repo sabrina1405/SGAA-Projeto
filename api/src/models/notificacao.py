@@ -27,6 +27,11 @@ class TipoNotificacao(enum.StrEnum):
     AULAS_CANCELADAS = "aulas_canceladas"
     # O aluno cancelou a participação; o aviso vai para o professor.
     PARTICIPACAO_CANCELADA = "participacao_cancelada"
+    ATIVIDADE_NOVA = "atividade_nova"
+    ATIVIDADE_EDITADA = "atividade_editada"
+    ATIVIDADE_LEMBRETE_SEMANA = "atividade_lembrete_semana"
+    ATIVIDADE_LEMBRETE_DIA = "atividade_lembrete_dia"
+    ATIVIDADE_VENCE_HOJE = "atividade_vence_hoje"
 
 
 class StatusEnvio(enum.StrEnum):

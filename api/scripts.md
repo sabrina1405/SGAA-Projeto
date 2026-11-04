@@ -14,6 +14,14 @@ Publicar na AWS Lambda (exige Docker e o `api/.aws.env`; migrações novas antes
 
 Guia completo: [Deploy na AWS Lambda](docs/deploy_aws_lambda.md)
 
+## Google Drive
+
+Gerar o refresh token (depois de publicar o app OAuth): `poetry run python -m src.scripts.gerar_token_drive`
+
+Conferir o Drive real (envio, link e CORS): `poetry run python -m src.scripts.validar_drive --origem http://localhost:8081`
+
+Guia completo: [Google Drive](docs/google_drive.md)
+
 ## Banco de dados e usuários
 
 Aplicar as migrações: `poetry run alembic upgrade head`

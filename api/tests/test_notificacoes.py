@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 import pytest
 from sqlalchemy import func, select
@@ -7,8 +7,15 @@ from src.core.push import FalhaPush, Recibo
 from src.core.security import agora
 from src.models.notificacao import Dispositivo, EnvioPush, Notificacao, StatusEnvio
 from src.schemas.aluno import hoje
-from src.services import aula_service, notificacao_service, recado_service
+from src.services import (
+    atividade_service,
+    aula_service,
+    notificacao_service,
+    recado_service,
+)
 from tests.conftest import cabecalho
+from tests.test_atividades import _atividade as _criar_atividade
+from tests.test_atividades import _quando
 from tests.test_aulas import _aula, _horario
 
 TEXTO = "**Aula de sábado** cancelada.\n\n# Reposição na terça"
@@ -548,3 +555,300 @@ def test_aluno_que_cancela_avisa_o_professor(
         "aula_id": aula["id"],
         "aluno_id": aluno_maior.id,
     }
+
+
+# --- atividades ---
+
+
+def _notificacoes_da_atividade(sessao, atividade_id):
+    return sessao.scalars(
+        select(Notificacao)
+        .where(
+            Notificacao.referencia_id == atividade_id,
+            Notificacao.tipo.like("atividade%"),
+            Notificacao.deletado_em.is_(None),
+        )
+        .order_by(Notificacao.enviar_em, Notificacao.id)
+    ).all()
+
+
+def _ate_na_atividade(monkeypatch, momento):
+    monkeypatch.setattr(notificacao_service, "agora", lambda: momento)
+    monkeypatch.setattr(atividade_service, "agora", lambda: momento)
+
+
+def _as_7h(data):
+    return datetime.combine(data, time(7, tzinfo=recado_service.HORARIO_DE_BRASILIA))
+
+
+def _vence_as_15h(dias):
+    return _horario(dias, hora=15)
+
+
+def test_atividade_liberada_avisa_na_hora(
+    client, professor, aluno_maior, enviador_push, sessao
+):
+    _registrar(client, aluno_maior)
+    atividade = _criar_atividade(client, professor, vence_em=_quando(days=10))
+    (mensagem,) = enviador_push.mensagens
+    assert mensagem.titulo == "Nova atividade: Redação"
+    assert mensagem.dados == {"tipo": "atividade_nova", "atividade_id": atividade["id"]}
+    assert mensagem.corpo.startswith("Entrega até ")
+    assert mensagem.corpo.endswith(", com Usuário de Teste")
+
+
+def test_atividade_futura_avisa_na_liberacao(
+    client, professor, aluno_maior, enviador_push, sessao, monkeypatch
+):
+    _registrar(client, aluno_maior)
+    liberar = agora() + timedelta(days=2)
+    atividade = _criar_atividade(
+        client,
+        professor,
+        liberar_em=liberar.isoformat(),
+        vence_em=(liberar + timedelta(hours=3)).isoformat(),
+    )
+    assert enviador_push.mensagens == []
+    assert _notificacoes_da_atividade(sessao, atividade["id"])[0].enviar_em == liberar
+
+    _ate_na_atividade(monkeypatch, liberar)
+    notificacao_service.processar_pendentes(sessao, enviador_push)
+    assert [m.dados["tipo"] for m in enviador_push.mensagens] == ["atividade_nova"]
+
+
+def test_horario_dos_lembretes(client, professor, sessao):
+    vence = _vence_as_15h(10)
+    atividade = _criar_atividade(client, professor, vence_em=vence.isoformat())
+    lembretes = [
+        (notificacao.tipo, notificacao.enviar_em)
+        for notificacao in _notificacoes_da_atividade(sessao, atividade["id"])
+        if notificacao.tipo != "atividade_nova"
+    ]
+    assert lembretes == [
+        ("atividade_lembrete_semana", vence - timedelta(weeks=1)),
+        ("atividade_lembrete_dia", vence - timedelta(days=1)),
+        ("atividade_vence_hoje", _as_7h(vence.date())),
+    ]
+
+
+def test_lembretes_antes_da_liberacao_nao_entram(client, professor, sessao):
+    vence = _vence_as_15h(10)
+    liberar = vence - timedelta(days=3)
+    atividade = _criar_atividade(
+        client,
+        professor,
+        liberar_em=liberar.isoformat(),
+        vence_em=vence.isoformat(),
+    )
+    tipos = [n.tipo for n in _notificacoes_da_atividade(sessao, atividade["id"])]
+    assert "atividade_lembrete_semana" not in tipos
+    assert "atividade_lembrete_dia" in tipos
+
+
+def test_vence_antes_das_7h_nao_tem_o_aviso_do_dia(client, professor, sessao):
+    vence = _horario(10, hora=6)
+    atividade = _criar_atividade(client, professor, vence_em=vence.isoformat())
+    tipos = [n.tipo for n in _notificacoes_da_atividade(sessao, atividade["id"])]
+    assert "atividade_vence_hoje" not in tipos
+
+
+def test_lembrete_nao_vai_para_quem_entregou(
+    client, professor, aluno_maior, aluno_fora, enviador_push, sessao, monkeypatch
+):
+    for usuario in (aluno_maior, aluno_fora):
+        _registrar(client, usuario)
+    vence = _vence_as_15h(3)
+    atividade = _criar_atividade(client, professor, vence_em=vence.isoformat())
+    client.put(
+        f"/v1/minhas-atividades/{atividade['id']}/entrega",
+        json={"resposta": "Pronto"},
+        headers=cabecalho(aluno_maior),
+    )
+    enviador_push.mensagens.clear()
+
+    _ate_na_atividade(monkeypatch, vence - timedelta(days=1))
+    notificacao_service.processar_pendentes(sessao, enviador_push)
+    (mensagem,) = enviador_push.mensagens
+    assert mensagem.token == _token(aluno_fora)
+    assert mensagem.titulo == "Atividade vence amanhã: Redação"
+
+
+def test_lembrete_atrasado_nao_sai_depois_do_vencimento(
+    client, professor, aluno_maior, enviador_push, sessao, monkeypatch
+):
+    _registrar(client, aluno_maior)
+    vence = _vence_as_15h(3)
+    _criar_atividade(client, professor, vence_em=vence.isoformat())
+    enviador_push.mensagens.clear()
+
+    _ate_na_atividade(monkeypatch, vence + timedelta(hours=1))
+    notificacao_service.processar_pendentes(sessao, enviador_push)
+    assert enviador_push.mensagens == []
+
+
+def test_mudar_o_vencimento_refaz_os_lembretes(client, professor, sessao):
+    atividade = _criar_atividade(
+        client, professor, vence_em=_vence_as_15h(10).isoformat()
+    )
+    novo = _vence_as_15h(20)
+    client.patch(
+        f"/v1/atividades/{atividade['id']}",
+        json={"vence_em": novo.isoformat()},
+        headers=cabecalho(professor),
+    )
+    sessao.expire_all()
+    lembretes = [
+        notificacao.enviar_em
+        for notificacao in _notificacoes_da_atividade(sessao, atividade["id"])
+        if "lembrete" in notificacao.tipo
+    ]
+    assert lembretes == [novo - timedelta(weeks=1), novo - timedelta(days=1)]
+
+
+def test_edicao_de_atividade_liberada_avisa(
+    client, professor, aluno_maior, enviador_push
+):
+    _registrar(client, aluno_maior)
+    atividade = _criar_atividade(client, professor)
+    enviador_push.mensagens.clear()
+
+    client.patch(
+        f"/v1/atividades/{atividade['id']}",
+        json={"titulo": "Conto"},
+        headers=cabecalho(professor),
+    )
+    (mensagem,) = enviador_push.mensagens
+    assert mensagem.titulo == "Atividade alterada: Conto"
+    assert mensagem.dados["tipo"] == "atividade_editada"
+
+
+@pytest.mark.parametrize(
+    "campos",
+    [{"titulo": "Redação"}, {"permite_envio_arquivo": True}, {"todos_grupos": True}],
+)
+def test_edicao_sem_mudar_o_conteudo_nao_avisa(
+    client, professor, aluno_maior, enviador_push, campos
+):
+    _registrar(client, aluno_maior)
+    atividade = _criar_atividade(client, professor)
+    enviador_push.mensagens.clear()
+    client.patch(
+        f"/v1/atividades/{atividade['id']}",
+        json=campos,
+        headers=cabecalho(professor),
+    )
+    assert enviador_push.mensagens == []
+
+
+def test_edicao_antes_da_liberacao_nao_avisa(
+    client, professor, aluno_maior, enviador_push, sessao
+):
+    _registrar(client, aluno_maior)
+    atividade = _criar_atividade(client, professor, liberar_em=_quando(days=2))
+    client.patch(
+        f"/v1/atividades/{atividade['id']}",
+        json={"titulo": "Conto"},
+        headers=cabecalho(professor),
+    )
+    assert enviador_push.mensagens == []
+    sessao.expire_all()
+    tipos = [n.tipo for n in _notificacoes_da_atividade(sessao, atividade["id"])]
+    assert "atividade_editada" not in tipos
+
+
+def test_adiar_a_liberacao_antes_do_aviso_muda_o_horario(client, professor, sessao):
+    atividade = _criar_atividade(client, professor, liberar_em=_quando(days=2))
+    novo = agora() + timedelta(days=3)
+    client.patch(
+        f"/v1/atividades/{atividade['id']}",
+        json={"liberar_em": novo.isoformat()},
+        headers=cabecalho(professor),
+    )
+    sessao.expire_all()
+    (nova,) = [
+        n
+        for n in _notificacoes_da_atividade(sessao, atividade["id"])
+        if n.tipo == "atividade_nova"
+    ]
+    assert nova.enviar_em == novo
+
+
+def test_atividade_ja_avisada_nao_avisa_de_novo_como_nova(
+    client, professor, aluno_maior, enviador_push, sessao, monkeypatch
+):
+    _registrar(client, aluno_maior)
+    atividade = _criar_atividade(client, professor)
+    assert len(enviador_push.mensagens) == 1
+    novo = agora() + timedelta(days=2)
+    client.patch(
+        f"/v1/atividades/{atividade['id']}",
+        json={"liberar_em": novo.isoformat()},
+        headers=cabecalho(professor),
+    )
+    enviador_push.mensagens.clear()
+
+    _ate_na_atividade(monkeypatch, novo + timedelta(minutes=1))
+    notificacao_service.processar_pendentes(sessao, enviador_push)
+    assert "atividade_nova" not in [m.dados["tipo"] for m in enviador_push.mensagens]
+
+
+def test_excluir_cancela_os_avisos(
+    client, professor, aluno_maior, enviador_push, sessao, monkeypatch
+):
+    _registrar(client, aluno_maior)
+    vence = _vence_as_15h(10)
+    atividade = _criar_atividade(client, professor, vence_em=vence.isoformat())
+    enviador_push.mensagens.clear()
+    client.delete(f"/v1/atividades/{atividade['id']}", headers=cabecalho(professor))
+
+    _ate_na_atividade(monkeypatch, vence - timedelta(minutes=1))
+    assert notificacao_service.processar_pendentes(sessao, enviador_push) == 0
+    assert enviador_push.mensagens == []
+
+
+def test_tarefa_agendada_tambem_limpa_os_arquivos(
+    client, professor, drive, sessao, enviador_push, monkeypatch
+):
+    resposta = client.post(
+        "/v1/arquivos/sessao",
+        json={"nome": "a.pdf", "tipo_mime": "application/pdf", "tamanho": 1},
+        headers=cabecalho(professor),
+    )
+    client.delete(
+        f"/v1/arquivos/{resposta.json()['dados']['arquivo_id']}",
+        headers=cabecalho(professor),
+    )
+    monkeypatch.setattr(
+        notificacao_service, "obter_enviador_push", lambda: enviador_push
+    )
+    monkeypatch.setattr(notificacao_service, "obter_drive", lambda: drive)
+    monkeypatch.setattr(notificacao_service, "obter_engine", lambda: sessao.get_bind())
+    resultado = notificacao_service.executar_tarefa_agendada()
+    assert resultado["arquivos_removidos"] == 1
+
+
+def test_drive_fora_do_ar_nao_afeta_a_fila_na_tarefa(
+    client, professor, aluno_maior, drive, sessao, enviador_push, monkeypatch
+):
+    _registrar(client, aluno_maior)
+    resposta = client.post(
+        "/v1/arquivos/sessao",
+        json={"nome": "a.pdf", "tipo_mime": "application/pdf", "tamanho": 1},
+        headers=cabecalho(professor),
+    )
+    client.delete(
+        f"/v1/arquivos/{resposta.json()['dados']['arquivo_id']}",
+        headers=cabecalho(professor),
+    )
+    drive.falhar = True
+    data = hoje() + timedelta(days=1)
+    _recado(client, professor, data_inicio=data.isoformat())
+    _avancar_ate_o_aviso(monkeypatch, data)
+    monkeypatch.setattr(
+        notificacao_service, "obter_enviador_push", lambda: enviador_push
+    )
+    monkeypatch.setattr(notificacao_service, "obter_drive", lambda: drive)
+    monkeypatch.setattr(notificacao_service, "obter_engine", lambda: sessao.get_bind())
+    resultado = notificacao_service.executar_tarefa_agendada()
+    assert resultado["enviadas"] == 1
+    assert resultado["arquivos_removidos"] == 0

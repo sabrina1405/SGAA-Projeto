@@ -30,6 +30,14 @@ class Config(BaseSettings):
     # Access token do Expo, exigido quando o projeto ativa o envio com segurança reforçada.
     expo_access_token: SecretStr | None = None
 
+    # "google" guarda os arquivos no Drive; "desligado" responde 503 nas rotas.
+    drive_backend: Literal["desligado", "google"] = "desligado"
+    google_drive_client_id: str = ""
+    google_drive_client_secret: SecretStr | None = None
+    google_drive_refresh_token: SecretStr | None = None
+    # Uma pasta por ambiente: os ids de arquivo se repetem entre eles.
+    google_drive_pasta_id: str = ""
+
     # Token de escrita do Logfire. Sem ele, a observabilidade fica desligada.
     logfire_token: SecretStr | None = None
 

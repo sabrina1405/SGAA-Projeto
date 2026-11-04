@@ -21,7 +21,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
-Banco: revisão `0008` do Alembic.
+Banco: revisão `0009` do Alembic.
 
 ### Adicionado
 
@@ -52,6 +52,11 @@ Banco: revisão `0008` do Alembic.
 - Agenda do aluno: `GET /v1/agenda` e `GET /v1/agenda/{aula_id}`, e `POST /v1/agenda/{aula_id}/cancelar` para cancelar a participação.
 - Push de aulas: lembretes aos alunos 1 semana, 1 dia e 30 minutos antes; aviso aos alunos quando a aula é cancelada; aviso à professora quando um aluno cancela.
 - Tabelas `aula`, `aula_aluno` e `aula_grupo` (migração `0008`).
+- Atividades da professora em `/v1/atividades`: criar, listar, detalhar, editar, excluir e acompanhar as entregas por aluno em `GET /v1/atividades/entregas`. Cada atividade tem datas de liberação e vencimento, destinatários (alunos, grupos ou todos) e anexos.
+- Atividades do aluno em `/v1/minhas-atividades`, com a resposta em `PUT /v1/minhas-atividades/{id}/entrega`: texto obrigatório e arquivos opcionais, editável até o vencimento. Vencida, ainda aceita a primeira entrega, marcada como atrasada.
+- Arquivos no Google Drive em `/v1/arquivos`, até 5 MB, com envio direto do app ao Drive e conferência pela API. Variáveis `DRIVE_BACKEND` e `GOOGLE_DRIVE_*`, e scripts `gerar_token_drive` e `validar_drive`.
+- Push de atividades: na liberação, na edição de uma atividade já liberada, 1 semana e 1 dia antes do vencimento e no dia do vencimento.
+- Tabelas `arquivo`, `atividade`, `atividade_aluno`, `atividade_grupo`, `anexo_atividade`, `entrega_atividade` e `anexo_entrega` (migração `0009`).
 - Deploy na AWS Lambda com o AWS SAM (`template.yaml`, `samconfig.toml`, `deploy_lambda.sh`), em homologação e produção. A API fica atrás do CloudFront, com rate limit pelo WAF, e recusa com `403` as chamadas que não passam por ele (`CLOUDFRONT_SEGREDO`). A tarefa agendada da fila de push é uma função própria, chamada pelo EventBridge a cada 5 minutos.
 - Configuração lida do Parameter Store na partida da Lambda (`SSM_PREFIXO`). A variável `AMBIENTE` identifica o ambiente em `/api/health` e no Logfire.
 - Dependências: `mangum` 0.22.0 e, no grupo dev, `boto3` 1.43.110.
@@ -64,6 +69,7 @@ Banco: revisão `0008` do Alembic.
 
 ### Alterado
 
+- Com `AMBIENTE=prod`, a documentação (`/docs`, `/redoc` e `/openapi.json`) responde `404`. Em homologação e localmente, continua disponível.
 - `logfire` 5.1.1 → 5.2.0, para levar o OpenTelemetry a 1.45.1 (CVE-2026-114603 no `opentelemetry-api` 1.44.0). Transitivas atualizadas: `certifi` 2026.10.23 (PYSEC-2026-4320) e `dnspython` 2.9.0 (CVE-2026-114605).
 - Dependências com versões fixas no `pyproject.toml`.
 - Nome padrão dos bancos: `sgaa_dev` para desenvolvimento e `sgaa_test` para testes.

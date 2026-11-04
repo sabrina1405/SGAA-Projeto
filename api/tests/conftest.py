@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from alembic import command
 from src.core.config import RAIZ_API
 from src.core.database import obter_engine, obter_sessao
+from src.core.drive import ArquivoNoDrive, FalhaDrive, obter_drive_na_requisicao
 from src.core.email import obter_enviador_email
 from src.core.push import (
     FalhaPush,
@@ -88,6 +89,65 @@ class EnviadorPushFalso:
         return [mensagem.token for mensagem in self.mensagens]
 
 
+class DriveFalso:
+    """Guarda os arquivos em memória. `falhar` simula o Drive fora do ar;
+    `receber` faz o papel do app enviando o conteúdo à URL da sessão."""
+
+    def __init__(self) -> None:
+        self.sessoes: dict[int, dict] = {}
+        self.arquivos: dict[str, ArquivoNoDrive] = {}
+        self.compartilhados: list[str] = []
+        self.apagados: list[str] = []
+        self.falhar = False
+
+    def _conferir(self) -> None:
+        if self.falhar:
+            raise FalhaDrive("falha simulada no Drive")
+
+    def abrir_sessao(self, *, arquivo_id, nome, tipo_mime, tamanho, origem=None) -> str:
+        self._conferir()
+        self.sessoes[arquivo_id] = {
+            "nome": nome,
+            "tipo_mime": tipo_mime,
+            "tamanho": tamanho,
+            "origem": origem,
+        }
+        return f"https://drive.exemplo/upload/{arquivo_id}"
+
+    def receber(self, arquivo_id, *, tamanho=None, tipo_mime=None) -> str:
+        sessao = self.sessoes[arquivo_id]
+        drive_file_id = f"drive-{arquivo_id}"
+        self.arquivos[drive_file_id] = ArquivoNoDrive(
+            id=drive_file_id,
+            tamanho=sessao["tamanho"] if tamanho is None else tamanho,
+            tipo_mime=tipo_mime or sessao["tipo_mime"],
+            arquivo_id=str(arquivo_id),
+            url=f"https://drive.exemplo/ver/{drive_file_id}",
+        )
+        return drive_file_id
+
+    def obter_arquivo(self, drive_file_id):
+        self._conferir()
+        return self.arquivos.get(drive_file_id)
+
+    def compartilhar_por_link(self, drive_file_id) -> None:
+        self._conferir()
+        self.compartilhados.append(drive_file_id)
+
+    def apagar(self, drive_file_id) -> None:
+        self._conferir()
+        self.apagados.append(drive_file_id)
+        self.arquivos.pop(drive_file_id, None)
+
+    def buscar_por_arquivo_id(self, arquivo_id) -> list[str]:
+        self._conferir()
+        return [
+            arquivo.id
+            for arquivo in self.arquivos.values()
+            if arquivo.arquivo_id == str(arquivo_id)
+        ]
+
+
 @pytest.fixture(scope="session")
 def engine():
     command.upgrade(ConfigAlembic(str(RAIZ_API / "alembic.ini")), "head")
@@ -117,10 +177,16 @@ def enviador_push():
 
 
 @pytest.fixture
-def client(sessao, enviador, enviador_push):
+def drive():
+    return DriveFalso()
+
+
+@pytest.fixture
+def client(sessao, enviador, enviador_push, drive):
     app.dependency_overrides[obter_sessao] = lambda: sessao
     app.dependency_overrides[obter_enviador_email] = lambda: enviador
     app.dependency_overrides[obter_enviador_push_na_requisicao] = lambda: enviador_push
+    app.dependency_overrides[obter_drive_na_requisicao] = lambda: drive
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -207,6 +273,29 @@ def aluno_maior(criar_aluno_com_perfil):
 @pytest.fixture
 def aluno_menor(criar_aluno_com_perfil):
     return criar_aluno_com_perfil("menor@exemplo.com", anos=15)
+
+
+@pytest.fixture
+def arquivo_confirmado(client, drive):
+    """Faz o caminho completo do envio e devolve o id do arquivo."""
+
+    def _enviar(usuario: Usuario, nome: str = "aula.pdf") -> int:
+        resposta = client.post(
+            "/v1/arquivos/sessao",
+            json={"nome": nome, "tipo_mime": "application/pdf", "tamanho": 1024},
+            headers=cabecalho(usuario),
+        )
+        assert resposta.status_code == 201, resposta.json()
+        arquivo_id = resposta.json()["dados"]["arquivo_id"]
+        resposta = client.post(
+            f"/v1/arquivos/{arquivo_id}/confirmar",
+            json={"drive_file_id": drive.receber(arquivo_id)},
+            headers=cabecalho(usuario),
+        )
+        assert resposta.status_code == 200, resposta.json()
+        return arquivo_id
+
+    return _enviar
 
 
 def nascido_ha(anos: int) -> date:
