@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 import { api } from '@/services/api';
-import { salvarToken } from '@/services/tokenStorage';
+import { removerToken, salvarToken } from '@/services/tokenStorage';
 
 import type { LoginEntrada, Resposta, TokenResposta, Usuario } from './types';
 
@@ -29,4 +29,9 @@ export function mensagemDeErro(erro: unknown): string {
     if (typeof detalhe === 'string') return detalhe;
   }
   return 'Ocorreu um erro inesperado. Tente novamente.';
+}
+
+// Encerra a sessão neste aparelho apagando o token salvo.
+export async function logout(): Promise<void> {
+  await removerToken();
 }
