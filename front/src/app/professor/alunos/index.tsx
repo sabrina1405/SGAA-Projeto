@@ -1,8 +1,11 @@
-import { useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 
+import { listarAlunos, mensagemDeErroAlunos } from '@/features/alunos/alunosService';
+import { formatarTelefone } from '@/features/alunos/formatadores';
+import type { AlunoListaItem } from '@/features/alunos/types';
 import { palette } from '@/constants/palette';
 
 type AlunoItem = {
@@ -14,14 +17,16 @@ type AlunoItem = {
   tipo: 'aluno' | 'grupo';
 };
 
-const ALUNOS_MOCK: AlunoItem[] = [
-  { id: '1', nome: 'Ana Souza', telefone: '(11) 98888-1111', email: 'anasouza@gmail.com', ativo: true, tipo: 'aluno' },
-  { id: '2', nome: 'Bruno Lima', telefone: '(11) 97777-2222', email: 'brunolima@gmail.com', ativo: true, tipo: 'aluno' },
-  { id: '3', nome: 'Carla Dias', telefone: '(11) 96666-3333', email: 'carladias@gmail.com', ativo: true, tipo: 'aluno' },
-  { id: '4', nome: 'Diego Alves', telefone: '(11) 95555-4444', email: 'diegoalves@gmail.com', ativo: true, tipo: 'aluno' },
-  { id: '5', nome: 'Helena Rocha', telefone: '(11) 94444-5555', email: 'helenarocha@gmail.com', ativo: false, tipo: 'aluno' },
-  { id: '6', nome: 'Nome do Grupo', ativo: true, tipo: 'grupo' },
-];
+function paraItem(aluno: AlunoListaItem): AlunoItem {
+  return {
+    id: String(aluno.id),
+    nome: aluno.nome_completo,
+    telefone: formatarTelefone(aluno.telefone),
+    email: aluno.email,
+    ativo: true,
+    tipo: 'aluno',
+  };
+}
 
 function Separador() {
   return <View style={styles.separador} />;
@@ -30,8 +35,51 @@ function Separador() {
 export default function AlunosScreen() {
   const router = useRouter();
   const [mostrarInativos, setMostrarInativos] = useState(false);
+  const [busca, setBusca] = useState(''); // Estado para a barra de pesquisa
+  const [alunos, setAlunos] = useState<AlunoItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [carregando, setCarregando] = useState(true);
+  const [carregandoMais, setCarregandoMais] = useState(false);
+  const [erro, setErro] = useState('');
+  const paginaAtual = useRef(1);
 
-  const dadosFiltrados = ALUNOS_MOCK.filter(item => (mostrarInativos ? true : item.ativo));
+  const carregarPagina = useCallback(async (pagina: number): Promise<boolean> => {
+    try {
+      const dados = await listarAlunos({ pagina });
+      const novos = dados.itens.map(paraItem);
+      setAlunos((atual) => (pagina === 1 ? novos : [...atual, ...novos]));
+      setTotal(dados.total);
+      setErro('');
+      return true;
+    } catch (e) {
+      setErro(mensagemDeErroAlunos(e));
+      return false;
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      paginaAtual.current = 1;
+      carregarPagina(1).finally(() => setCarregando(false));
+    }, [carregarPagina]),
+  );
+
+  async function carregarMais() {
+    if (carregando || carregandoMais || alunos.length >= total) return;
+    setCarregandoMais(true);
+    paginaAtual.current += 1;
+    const ok = await carregarPagina(paginaAtual.current);
+    if (!ok) paginaAtual.current -= 1;
+    setCarregandoMais(false);
+  }
+
+  // Filtragem combinada por Status (Ativo/Inativo) e Texto da Barra de Pesquisa
+  const dadosFiltrados = alunos.filter((item) => {
+    const matchStatus = mostrarInativos ? true : item.ativo;
+    const matchBusca = item.nome.toLowerCase().includes(busca.toLowerCase()) || 
+                       (item.email && item.email.toLowerCase().includes(busca.toLowerCase()));
+    return matchStatus && matchBusca;
+  });
 
   return (
     <FlatList
@@ -40,25 +88,64 @@ export default function AlunosScreen() {
       data={dadosFiltrados}
       keyExtractor={(item) => item.id}
       ItemSeparatorComponent={Separador}
-      ListEmptyComponent={<Text style={styles.vazio}>Nenhum aluno encontrado.</Text>}
+      ListEmptyComponent={
+        carregando ? (
+          <ActivityIndicator color={palette.header} style={{ marginTop: 24 }} />
+        ) : erro ? (
+          <Text style={styles.vazio}>{erro}</Text>
+        ) : (
+          <Text style={styles.vazio}>Nenhum aluno encontrado.</Text>
+        )
+      }
+      ListFooterComponent={
+        carregandoMais ? <ActivityIndicator color={palette.header} style={{ marginTop: 12 }} /> : null
+      }
+      onEndReached={carregarMais}
+      onEndReachedThreshold={0.4}
       ListHeaderComponent={
         <View style={styles.headerWrapper}>
           {/* Barra de Ações Superiores */}
           <View style={styles.acoesContainer}>
-            <Pressable style={({ pressed }) => [styles.botaoAcao, pressed && styles.pressionado]} onPress={() => {}}>
+            <Pressable 
+              style={({ pressed }) => [styles.botaoAcao, pressed && styles.pressionado]} 
+              onPress={() => {}}
+            >
               <Ionicons name="person-outline" size={16} color="#ffffff" />
-              <Text style={styles.botaoTexto}>Filtrar Aluno</Text>
+              <Text style={styles.botaoTexto}>Filtrar</Text>
             </Pressable>
 
-            <Pressable style={({ pressed }) => [styles.botaoAcao, pressed && styles.pressionado]} onPress={() => {}}>
+            <Pressable 
+              style={({ pressed }) => [styles.botaoAcao, pressed && styles.pressionado]} 
+              onPress={() => router.push('/professor/alunos/novo-grupo')}
+            >
               <Ionicons name="people-outline" size={16} color="#ffffff" />
               <Text style={styles.botaoTexto}>Novo Grupo</Text>
             </Pressable>
 
-            <Pressable style={({ pressed }) => [styles.botaoAcao, pressed && styles.pressionado]} onPress={() => {}}>
+            <Pressable
+              style={({ pressed }) => [styles.botaoAcao, pressed && styles.pressionado]}
+              onPress={() => router.push('/professor/alunos/novo')}
+            >
               <Ionicons name="person-add-outline" size={16} color="#ffffff" />
               <Text style={styles.botaoTexto}>Novo Aluno</Text>
             </Pressable>
+          </View>
+
+          {/* Barra de Pesquisa */}
+          <View style={styles.searchContainer}>
+            <Ionicons name="search-outline" size={18} color={palette.textMuted} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Pesquisar aluno por nome ou e-mail..."
+              placeholderTextColor="#9CA3AF"
+              value={busca}
+              onChangeText={setBusca}
+            />
+            {busca.length > 0 && (
+              <Pressable onPress={() => setBusca('')}>
+                <Ionicons name="close-circle" size={18} color={palette.textMuted} />
+              </Pressable>
+            )}
           </View>
 
           {/* Toggle de Mostrar Inativos */}
@@ -101,7 +188,6 @@ export default function AlunosScreen() {
             </Text>
           </View>
 
-          {/* Botão para navegar especificamente para os detalhes do ID clicado */}
           <Pressable 
             style={({ pressed }) => [styles.viewButton, pressed && styles.pressionado]}
             onPress={() => router.push(`/professor/alunos/${item.id}`)}
@@ -117,12 +203,11 @@ export default function AlunosScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: palette.background },
   conteudo: { padding: 16, paddingBottom: 32 },
-  headerWrapper: { gap: 14, marginBottom: 12 },
+  headerWrapper: { gap: 12, marginBottom: 12 },
 
   acoesContainer: {
     flexDirection: 'row',
     gap: 8,
-    flexWrap: 'wrap',
   },
   botaoAcao: {
     backgroundColor: palette.header,
@@ -134,9 +219,22 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     flex: 1,
     justifyContent: 'center',
-    minWidth: 95,
   },
   botaoTexto: { color: '#ffffff', fontSize: 11, fontWeight: '600' },
+
+  /* Estilo da Barra de Pesquisa */
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: palette.line,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 44,
+  },
+  searchIcon: { marginRight: 8 },
+  searchInput: { flex: 1, fontSize: 13, color: palette.title },
 
   switchContainer: {
     flexDirection: 'row',

@@ -1,11 +1,59 @@
-import { ScrollView, StyleSheet, Text, View, Pressable } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 
+import { mensagemDeErroAlunos, obterAluno } from '@/features/alunos/alunosService';
+import { formatarCpf, formatarData, formatarTelefone } from '@/features/alunos/formatadores';
+import type { AlunoDetalhe } from '@/features/alunos/types';
 import { palette } from '@/constants/palette';
 
 export default function InformacoesAlunoScreen() {
   const { id } = useLocalSearchParams(); // Aqui você captura o ID do aluno clicado (ex: "1", "2")
+  const alunoId = Array.isArray(id) ? id[0] : id;
+
+  const [aluno, setAluno] = useState<AlunoDetalhe | null>(null);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState('');
+
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      try {
+        const dados = await obterAluno(alunoId);
+        if (ativo) setAluno(dados);
+      } catch (e) {
+        if (ativo) setErro(mensagemDeErroAlunos(e));
+      } finally {
+        if (ativo) setCarregando(false);
+      }
+    })();
+    return () => {
+      ativo = false;
+    };
+  }, [alunoId]);
+
+  if (carregando) {
+    return (
+      <View style={styles.centro}>
+        <ActivityIndicator color={palette.header} />
+      </View>
+    );
+  }
+
+  if (erro || !aluno) {
+    return (
+      <View style={styles.centro}>
+        <Text style={styles.erroTexto}>{erro || 'Aluno não encontrado.'}</Text>
+      </View>
+    );
+  }
+
+  const perfil = aluno.perfil;
+  const concluido = aluno.primeiro_acesso_concluido;
+  // Para menor de idade, CPF e telefone cadastrados são os do responsável.
+  const cpf = perfil?.possui_responsavel ? perfil.responsavel_cpf : perfil?.cpf;
+  const telefone = perfil?.possui_responsavel ? perfil.responsavel_telefone : perfil?.telefone;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.conteudo} showsVerticalScrollIndicator={false}>
@@ -21,12 +69,14 @@ export default function InformacoesAlunoScreen() {
           </Pressable>
         </View>
 
-        <Text style={styles.nomeAluno}>Aluno ID: {id}</Text>
-        <Text style={styles.emailAluno}>nomecompleto@gmail.com</Text>
+        <Text style={styles.nomeAluno}>{aluno.nome_completo}</Text>
+        <Text style={styles.emailAluno}>{aluno.email}</Text>
 
-        <View style={styles.badgeAtivoHeader}>
-          <View style={styles.dotStatus} />
-          <Text style={styles.badgeAtivoTexto}>Aluno Ativo</Text>
+        <View style={[styles.badgeAtivoHeader, !concluido && { backgroundColor: '#FFF8E1' }]}>
+          <View style={[styles.dotStatus, !concluido && { backgroundColor: '#B7791F' }]} />
+          <Text style={[styles.badgeAtivoTexto, !concluido && { color: '#B7791F' }]}>
+            {concluido ? 'Aluno Ativo' : 'Primeiro acesso pendente'}
+          </Text>
         </View>
 
         <View style={styles.heroAcoesRow}>
@@ -71,23 +121,33 @@ export default function InformacoesAlunoScreen() {
             <Ionicons name="calendar-outline" size={18} color={palette.header} />
             <View style={styles.dadoInfo}>
               <Text style={styles.dadoLabel}>Data de Nascimento</Text>
-              <Text style={styles.dadoValor}>15/04/2008</Text>
+              <Text style={styles.dadoValor}>{formatarData(perfil?.data_nascimento)}</Text>
             </View>
           </View>
+
+          {perfil?.possui_responsavel && (
+            <View style={styles.linhaDado}>
+              <Ionicons name="people-outline" size={18} color={palette.header} />
+              <View style={styles.dadoInfo}>
+                <Text style={styles.dadoLabel}>Responsável</Text>
+                <Text style={styles.dadoValor}>{perfil.responsavel_nome ?? '—'}</Text>
+              </View>
+            </View>
+          )}
 
           <View style={styles.linhaDado}>
             <Ionicons name="card-outline" size={18} color={palette.header} />
             <View style={styles.dadoInfo}>
-              <Text style={styles.dadoLabel}>CPF</Text>
-              <Text style={styles.dadoValor}>000.000.000-00</Text>
+              <Text style={styles.dadoLabel}>{perfil?.possui_responsavel ? 'CPF do Responsável' : 'CPF'}</Text>
+              <Text style={styles.dadoValor}>{formatarCpf(cpf)}</Text>
             </View>
           </View>
 
           <View style={styles.linhaDado}>
             <Ionicons name="call-outline" size={18} color={palette.header} />
             <View style={styles.dadoInfo}>
-              <Text style={styles.dadoLabel}>Telefone</Text>
-              <Text style={styles.dadoValor}>(11) 98765-4321</Text>
+              <Text style={styles.dadoLabel}>{perfil?.possui_responsavel ? 'Telefone do Responsável' : 'Telefone'}</Text>
+              <Text style={styles.dadoValor}>{formatarTelefone(telefone)}</Text>
             </View>
           </View>
         </View>
@@ -99,6 +159,8 @@ export default function InformacoesAlunoScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: palette.background },
+  centro: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: palette.background },
+  erroTexto: { color: '#C62828', fontSize: 13, fontWeight: '600', textAlign: 'center' },
   conteudo: { padding: 16, paddingBottom: 40, gap: 20 },
   heroCard: {
     backgroundColor: '#FFFFFF',
