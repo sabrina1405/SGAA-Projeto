@@ -1,0 +1,28 @@
+# Configuração do AWS SAM por ambiente. O bucket dos pacotes vem de
+# SGAA_DEPLOY_BUCKET, no api/.aws.env, passado pelo deploy_lambda.sh.
+version = 0.1
+
+[default.global.parameters]
+region = "us-east-1"
+
+[default.validate.parameters]
+lint = true
+
+[homolog.deploy.parameters]
+stack_name = "sgaa-api-homolog"
+region = "us-east-1"
+s3_prefix = "homolog"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "Ambiente=homolog"
+confirm_changeset = false
+fail_on_empty_changeset = false
+
+[prod.deploy.parameters]
+stack_name = "sgaa-api-prod"
+region = "us-east-1"
+s3_prefix = "prod"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "Ambiente=prod"
+# Mostra as mudanças e pede confirmação antes de aplicar em prod.
+confirm_changeset = true
+fail_on_empty_changeset = false

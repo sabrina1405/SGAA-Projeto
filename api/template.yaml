@@ -1,0 +1,151 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >-
+  API do SGAA (FastAPI) na AWS Lambda, atrás do CloudFront, e a tarefa
+  agendada da fila de push. Uma stack por ambiente.
+
+Parameters:
+  Ambiente:
+    Type: String
+    AllowedValues: [homolog, prod]
+    Description: Também é o prefixo dos parâmetros no Parameter Store (/homolog/, /prod/).
+  IntervaloTarefa:
+    Type: String
+    Default: rate(5 minutes)
+    Description: >-
+      Frequência da fila de push. Com 5 minutos, o lembrete de 30 minutos antes
+      da aula chega com até 5 minutos de atraso.
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures: [x86_64]
+    # Montado pelo deploy_lambda.sh só com o que a Lambda precisa.
+    CodeUri: build/lambda
+    Environment:
+      Variables:
+        # A configuração vem do Parameter Store, lida na partida da instância.
+        SSM_PREFIXO: !Sub /${Ambiente}/
+        AMBIENTE: !Ref Ambiente
+
+Resources:
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub sgaa-api-${Ambiente}
+      Handler: lambda_handler.handler
+      MemorySize: 1024
+      Timeout: 15
+      # Sem CORS na URL: o FastAPI responde ao CORS.
+      FunctionUrlConfig:
+        AuthType: NONE
+      LoggingConfig:
+        LogGroup: !Ref ApiLogs
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: ssm:GetParametersByPath
+              Resource:
+                - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${Ambiente}
+                - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${Ambiente}/*
+            - Effect: Allow
+              Action: kms:Decrypt
+              Resource: "*"
+              Condition:
+                StringEquals:
+                  kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
+
+  # Desde outubro de 2025, a Function URL pública exige também
+  # lambda:InvokeFunction, além do lambda:InvokeFunctionUrl que o SAM cria.
+  # Restrita a chamadas pela própria URL.
+  PermissaoInvocarPelaUrl:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ApiFunction
+      Action: lambda:InvokeFunction
+      Principal: "*"
+      InvokedViaFunctionUrl: true
+
+  ApiLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /sgaa/api-${Ambiente}
+      RetentionInDays: 14
+
+  TarefaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub sgaa-api-tarefa-${Ambiente}
+      Handler: lambda_tarefa.handler
+      MemorySize: 512
+      # Envia até 50 notificações por execução, cada uma com chamadas ao Expo.
+      Timeout: 60
+      LoggingConfig:
+        LogGroup: !Ref TarefaLogs
+      Events:
+        Agendamento:
+          Type: Schedule
+          Properties:
+            Name: !Sub sgaa-api-tarefa-${Ambiente}
+            Schedule: !Ref IntervaloTarefa
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: ssm:GetParametersByPath
+              Resource:
+                - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${Ambiente}
+                - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${Ambiente}/*
+            - Effect: Allow
+              Action: kms:Decrypt
+              Resource: "*"
+              Condition:
+                StringEquals:
+                  kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
+
+  TarefaLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /sgaa/api-tarefa-${Ambiente}
+      RetentionInDays: 14
+
+  Distribuicao:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub sgaa-api-${Ambiente}
+        HttpVersion: http2and3
+        Origins:
+          - Id: lambda
+            # https://xxxx.lambda-url.us-east-1.on.aws/ → xxxx.lambda-url.us-east-1.on.aws
+            DomainName: !Select [2, !Split ["/", !GetAtt ApiFunctionUrl.FunctionUrl]]
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+            # A API recusa com 403 o que chega sem este cabeçalho, para que
+            # ninguém chame a Function URL direto e escape do rate limit.
+            # O parâmetro precisa ser String: o CloudFormation não lê SecureString aqui.
+            OriginCustomHeaders:
+              - HeaderName: X-Origem-Cloudfront
+                HeaderValue: !Sub "{{resolve:ssm:/${Ambiente}/cloudfront_segredo}}"
+        DefaultCacheBehavior:
+          TargetOriginId: lambda
+          ViewerProtocolPolicy: https-only
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          # Políticas gerenciadas: CachingDisabled e AllViewerExceptHostHeader
+          # (repassa Authorization, query string e corpo).
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+
+Outputs:
+  UrlApi:
+    Description: URL que o front usa (CloudFront).
+    Value: !Sub https://${Distribuicao.DomainName}
+  UrlFunction:
+    Description: Function URL da Lambda. Chamada direta responde 403.
+    Value: !GetAtt ApiFunctionUrl.FunctionUrl
+  DistribuicaoId:
+    Description: Id da distribuição, para assinar o plano Free e associar o WAF.
+    Value: !Ref Distribuicao
