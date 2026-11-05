@@ -8,7 +8,7 @@
 
 Para mais comandos, confira o arquivo `package.json`
 
-## Links importantes
+## Links importantess
 
 - https://expo.dev/ (Infra para build pelo CLI, CI/CD pra mobile, deploy e monitoramento de produção )
 - (https://docs.expo.dev/develop/unit-testing/)
