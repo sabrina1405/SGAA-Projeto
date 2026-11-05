@@ -1,4 +1,4 @@
-export type StatusEvento = 'confirmada' | 'pendente' | 'reposicao';
+export type StatusEvento = 'confirmada' | 'pendente' | 'reposicao' | 'cancelada';
 export type FiltroStatus = StatusEvento | 'todos';
 
 export type Evento = {
