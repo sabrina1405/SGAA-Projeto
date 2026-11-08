@@ -1,15 +1,22 @@
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 RAIZ_API = Path(__file__).resolve().parents[2]
 
 
+AMBIENTES_AWS = {"homolog", "prod"}
+
+
 class Config(BaseSettings):
     model_config = SettingsConfigDict(env_file=RAIZ_API / ".env", extra="ignore")
+
+    # AMBIENTE vem do template da AWS (homolog ou prod); VERCEL_ENV, da Vercel.
+    ambiente: str | None = None
+    vercel_env: str | None = None
 
     database_url: str
     secret_key: SecretStr = Field(min_length=32)
@@ -47,6 +54,19 @@ class Config(BaseSettings):
 
     # Origens separadas por vírgula. O app mobile não depende de CORS.
     cors_origins: str = "http://localhost:8081"
+
+    @model_validator(mode="after")
+    def conferir_ambiente_publicado(self) -> Self:
+        """Falha ao subir em vez de publicar a API com uma configuração insegura."""
+        na_aws = self.ambiente in AMBIENTES_AWS
+        if na_aws and self.cloudfront_segredo is None:
+            # Sem o segredo, a Function URL aceitaria chamadas fora do CloudFront.
+            raise ValueError(f"CLOUDFRONT_SEGREDO é obrigatório em {self.ambiente}")
+        publicado = na_aws or self.vercel_env == "production"
+        if publicado and self.email_backend == "console":
+            # O backend console grava os códigos de verificação no log.
+            raise ValueError("EMAIL_BACKEND=console não é permitido fora de dev")
+        return self
 
     @property
     def lista_cors_origins(self) -> list[str]:
