@@ -579,7 +579,7 @@ O arquivo sobe antes de salvar o formulário: abra a sessão, envie o conteúdo 
 ```
 
 - Erro: Drive desligado ou fora do ar → `503`.
-- Erro: 10 arquivos enviados e ainda não salvos → `409`.
+- Erro: 10 arquivos enviados e ainda não salvos → `409`. Sessões descartadas antes do envio continuam contando por até 7 dias, enquanto a URL de envio ainda vale.
 
 ### Enviar o conteúdo
 

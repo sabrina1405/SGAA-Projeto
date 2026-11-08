@@ -37,6 +37,9 @@ TIPOS_PERMITIDOS = frozenset(
 MAXIMO_SEM_VINCULO_POR_USUARIO = 10
 VALIDADE_DO_PENDENTE = timedelta(hours=1)
 VALIDADE_SEM_VINCULO = timedelta(hours=24)
+# Vida da sessão de envio resumível do Drive: até lá a URL entregue ao app
+# ainda aceita o conteúdo, mesmo depois de o arquivo ser descartado.
+VALIDADE_DA_SESSAO_DRIVE = timedelta(days=7)
 REMOCOES_POR_EXECUCAO = 20
 
 
@@ -117,8 +120,15 @@ def abrir_sessao(
         .where(
             Arquivo.enviado_por_id == usuario.id,
             Arquivo.deletado_em.is_(None),
-            Arquivo.status != StatusArquivo.REMOVER,
             _sem_vinculo(),
+            or_(
+                Arquivo.status != StatusArquivo.REMOVER,
+                # Descartado sem conteúdo: a sessão ainda pode receber o envio.
+                and_(
+                    Arquivo.drive_file_id.is_(None),
+                    Arquivo.criado_em > agora() - VALIDADE_DA_SESSAO_DRIVE,
+                ),
+            ),
         )
     )
     if sem_vinculo >= MAXIMO_SEM_VINCULO_POR_USUARIO:
@@ -248,6 +258,8 @@ def limpar(
 
     Para na primeira falha: com o Drive fora do ar, cada tentativa só gastaria o
     tempo da tarefa agendada. O que sobrou fica para a próxima execução.
+    Sem conteúdo no Drive, a linha só é encerrada depois que a sessão de envio
+    expira; antes disso, o envio tardio ainda é encontrado e apagado.
     """
     momento = agora()
     arquivos = sessao.scalars(
@@ -267,7 +279,8 @@ def limpar(
                 ),
             ),
         )
-        .order_by(Arquivo.id)
+        # Os adiados voltam para o fim da fila e não tomam as vagas da execução.
+        .order_by(Arquivo.atualizado_em, Arquivo.id)
         .limit(limite)
     ).all()
     removidos = 0
@@ -283,6 +296,12 @@ def limpar(
         except FalhaDrive:
             logger.exception("Falha ao apagar o arquivo %s do Drive", arquivo.id)
             break
+        if not no_drive and arquivo.criado_em > momento - VALIDADE_DA_SESSAO_DRIVE:
+            # Nada chegou ainda, mas a sessão pode receber o envio depois:
+            # a linha fica para ser conferida de novo.
+            arquivo.atualizado_em = momento
+            sessao.commit()
+            continue
         arquivo.deletado_em = agora()
         sessao.commit()
         removidos += 1
