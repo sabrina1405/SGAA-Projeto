@@ -150,7 +150,7 @@ Só atende contas que já concluíram o primeiro acesso.
 - **Quem aparece na lista**: só alunos que concluíram o primeiro acesso. Um aluno cadastrado que ainda não ativou a conta não é listado; o detalhe dele responde pelo `id` devolvido no cadastro, com `perfil` nulo e `primeiro_acesso_concluido` falso.
 - **Telefone da lista**: o do aluno ou, quando ele tem responsável, o do responsável.
 - **Busca**: o parâmetro `busca` (até 100 caracteres) procura um trecho no nome ou no e-mail, sem diferenciar maiúsculas nem acentos: `joao` encontra `João`.
-- **Detalhe**: `aulas` e `pagamentos` estão reservados e vêm sempre como listas vazias. Um `id` de professor responde `404`.
+- **Detalhe**: `aulas` está reservado e vem sempre como lista vazia. `pagamentos` traz as cobranças do aluno com a professora que consulta, no formato da lista de cobranças do financeiro, do vencimento mais novo ao mais antigo. Um `id` de professor responde `404`.
 
 ### Perfil do aluno
 
@@ -357,6 +357,45 @@ Campos que o aluno pode editar:
 - **Quem vê**: a pasta raiz liberada para todos os alunos, para todos os grupos da professora, para um grupo do aluno ou para o aluno diretamente. As subpastas seguem a raiz.
 - **Sair do grupo**: o acesso acaba na hora. Pasta não liberada ou excluída responde `404`.
 
+### Financeiro (professor)
+
+| Rota | Resultado |
+| --- | --- |
+| `POST /v1/financeiro/planos` | Cria a cobrança recorrente (mensal ou semanal) de um aluno. |
+| `GET /v1/financeiro/planos` | Planos ativos, pelo nome do aluno; `?aluno_id=` filtra. Paginado. |
+| `GET /v1/financeiro/planos/{id}` | Detalhe do plano. |
+| `PATCH /v1/financeiro/planos/{id}` | Altera descrição, valor, dia ou fim. |
+| `DELETE /v1/financeiro/planos/{id}` | Encerra o plano. |
+| `POST /v1/financeiro/cobrancas` | Cria uma cobrança avulsa. |
+| `GET /v1/financeiro/cobrancas` | Por vencimento, da mais antiga à mais nova. Filtros: `aluno_id`, `situacao`, `de`, `ate`. Paginado. |
+| `GET /v1/financeiro/cobrancas/{id}` | Detalhe da cobrança. |
+| `PATCH /v1/financeiro/cobrancas/{id}` | Altera descrição, valor ou vencimento de uma pendente. |
+| `POST /v1/financeiro/cobrancas/{id}/pagar` | Dá baixa. Corpo opcional com `paga_em`. |
+| `POST /v1/financeiro/cobrancas/{id}/reabrir` | Desfaz a baixa. |
+| `POST /v1/financeiro/cobrancas/{id}/cancelar` | Cancela uma pendente. |
+| `GET /v1/financeiro/resumo` | Totais do mês (`?mes=AAAA-MM`, padrão: o atual). |
+
+- **Pagamento**: por Pix, fora do app, na chave Pix da professora. A baixa é manual: a professora confere o recebimento e chama `/pagar`.
+- **Valores**: sempre em centavos (`valor_centavos`), de 1 a 10000000 (R$ 100 mil).
+- **Situação**: `pendente`, `vencida`, `paga` ou `cancelada`. `vencida` é calculada: uma pendente com o vencimento antes de hoje (horário de Brasília).
+- **Plano**: `frequencia` `mensal`, com `dia_vencimento` de 1 a 31 (no mês mais curto, vale o último dia), ou `semanal`, com `dia_vencimento` de 0 (segunda) a 6 (domingo). `inicio` é hoje ou depois (`422` com `tipo` igual a `inicio_no_passado`); cobranças anteriores entram como avulsas. Sem `fim`, vale até ser encerrado.
+- **Geração**: as cobranças de cada plano são criadas com 10 dias de antecedência, ao criar o plano e pela tarefa agendada. Cada uma guarda descrição e valor do momento em que foi gerada.
+- **Editar o plano**: vale para as cobranças ainda não vencidas; as vencidas e as pagas ficam como estão. Mudar o dia ou o fim refaz as datas futuras.
+- **Encerrar o plano**: as cobranças ainda não vencidas são canceladas; as vencidas continuam devidas.
+- **Baixa**: só uma pendente (inclusive vencida) pode ser paga, editada ou cancelada, e só uma paga pode ser reaberta. Fora disso, `409`.
+- **Dono**: plano ou cobrança de outro professor responde `404`. Aluno que não existe ou não concluiu o primeiro acesso responde `422` com `tipo` igual a `aluno_invalido`.
+- **Resumo**: pelo vencimento dentro do mês, sem as canceladas: `recebido_centavos` (pagas), `pendente_centavos` (a vencer) e `vencido_centavos` (pendentes atrasadas).
+
+### Minhas cobranças (aluno)
+
+| Rota | Resultado |
+| --- | --- |
+| `GET /v1/minhas-cobrancas` | Cobranças de todas as professoras, da mais recente à mais antiga. `?situacao=` filtra. Paginado. |
+| `GET /v1/minhas-cobrancas/{id}` | Detalhe da cobrança. |
+
+- **Como pagar**: cada cobrança traz `professor_nome` e `chave_pix` de quem cobra. `chave_pix` vem nula se a professora ainda não cadastrou a dela.
+- **Dono**: cobrança de outro aluno responde `404`.
+
 ### Notificações push
 
 | Rota | Resultado |
@@ -376,11 +415,13 @@ Campos que o aluno pode editar:
 - **Atividade nova**: os destinatários recebem o push na liberação: na hora, se `liberar_em` já passou. Adiar a liberação antes do envio muda o horário. Uma atividade já avisada não avisa de novo como nova.
 - **Atividade alterada**: se já foi liberada e mudaram título, descrição, datas ou anexos. Mudar só os destinatários ou `permite_envio_arquivo` não avisa.
 - **Lembretes de atividade**: 1 semana e 1 dia antes de `vence_em`, e às 7h (horário de Brasília) do dia do vencimento, só para quem ainda não entregou. Os que cairiam antes da liberação, no passado ou depois do vencimento não são agendados. Mudar `vence_em` refaz os lembretes, e excluir a atividade cancela os avisos.
+- **Cobranças**: o aluno recebe push 3 dias antes ("Pagamento vence em 3 dias") e no dia do vencimento ("Pagamento vence hoje"), às 9h (horário de Brasília). No dia seguinte, às 9h, se não houver baixa, o aluno recebe "Pagamento em atraso" e a professora, "Pagamento em atraso: {aluno}". O corpo traz a descrição, o valor e o vencimento. A baixa, o cancelamento ou o encerramento do plano cancelam os avisos; mudar o vencimento os refaz. Lembretes cujo horário já passou não são agendados, mas o de atraso sai mesmo para uma cobrança lançada já vencida.
 - **`dados`**: cada push leva um objeto para o app abrir a tela certa ao tocar na notificação.
   - Recado: `{"tipo": "recado", "recado_id": 41}`.
   - Aula: `{"tipo": "aula_lembrete_semana", "aula_id": 501}`, com `tipo` igual a `aula_lembrete_semana`, `aula_lembrete_dia`, `aula_lembrete_30min`, `aula_cancelada` ou `aulas_canceladas`.
   - Aluno cancelou: `{"tipo": "participacao_cancelada", "aula_id": 501, "aluno_id": 866}`.
   - Atividade: `{"tipo": "atividade_nova", "atividade_id": 397}`, com `tipo` igual a `atividade_nova`, `atividade_editada`, `atividade_lembrete_semana`, `atividade_lembrete_dia` ou `atividade_vence_hoje`.
+  - Cobrança: `{"tipo": "cobranca_vence_hoje", "cobranca_id": 73}`, com `tipo` igual a `cobranca_vence_em_breve`, `cobranca_vence_hoje`, `cobranca_vencida` ou, para a professora, `cobranca_vencida_professor`.
 
 ---
 
