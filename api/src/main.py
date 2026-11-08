@@ -10,8 +10,10 @@ from src.api.routes import (
     auth,
     dispositivos,
     grupos,
+    meus_materiais,
     minhas_atividades,
     mural,
+    pastas,
     recados,
     usuarios,
 )
@@ -46,6 +48,8 @@ v1.include_router(agenda.router)
 v1.include_router(arquivos.router)
 v1.include_router(atividades.router)
 v1.include_router(minhas_atividades.router)
+v1.include_router(pastas.router)
+v1.include_router(meus_materiais.router)
 v1.include_router(dispositivos.router)
 app.include_router(v1)
 
