@@ -379,7 +379,7 @@ Campos que o aluno pode editar:
 - **Valores**: sempre em centavos (`valor_centavos`), de 1 a 10000000 (R$ 100 mil).
 - **Situação**: `pendente`, `vencida`, `paga` ou `cancelada`. `vencida` é calculada: uma pendente com o vencimento antes de hoje (horário de Brasília).
 - **Plano**: `frequencia` `mensal`, com `dia_vencimento` de 1 a 31 (no mês mais curto, vale o último dia), ou `semanal`, com `dia_vencimento` de 0 (segunda) a 6 (domingo). `inicio` é hoje ou depois (`422` com `tipo` igual a `inicio_no_passado`); cobranças anteriores entram como avulsas. Sem `fim`, vale até ser encerrado.
-- **Geração**: as cobranças de cada plano são criadas com 10 dias de antecedência, ao criar o plano e pela tarefa agendada. Cada uma guarda descrição e valor do momento em que foi gerada.
+- **Geração**: as cobranças de cada plano são criadas com 35 dias de antecedência (o suficiente para o aviso de 1 mês), ao criar o plano e pela tarefa agendada. Cada uma guarda descrição e valor do momento em que foi gerada.
 - **Editar o plano**: vale para as cobranças ainda não vencidas; as vencidas e as pagas ficam como estão. Mudar o dia ou o fim refaz as datas futuras, a partir do mês (ou da semana) seguinte à última cobrança que ficou, e nunca antes de hoje: cada período tem uma cobrança só, e nenhuma nasce vencida.
 - **Encerrar o plano**: as cobranças ainda não vencidas são canceladas; as vencidas continuam devidas.
 - **Baixa**: só uma pendente (inclusive vencida) pode ser paga, editada ou cancelada, e só uma paga pode ser reaberta. Fora disso, `409`. Mover uma cobrança de plano para o vencimento de outra do mesmo plano também responde `409`.
@@ -415,13 +415,18 @@ Campos que o aluno pode editar:
 - **Atividade nova**: os destinatários recebem o push na liberação: na hora, se `liberar_em` já passou. Adiar a liberação antes do envio muda o horário. Uma atividade já avisada não avisa de novo como nova.
 - **Atividade alterada**: se já foi liberada e mudaram título, descrição, datas ou anexos. Mudar só os destinatários ou `permite_envio_arquivo` não avisa.
 - **Lembretes de atividade**: 1 semana e 1 dia antes de `vence_em`, e às 7h (horário de Brasília) do dia do vencimento, só para quem ainda não entregou. Os que cairiam antes da liberação, no passado ou depois do vencimento não são agendados. Mudar `vence_em` refaz os lembretes, e excluir a atividade cancela os avisos.
-- **Cobranças**: o aluno recebe push 3 dias antes ("Pagamento vence em 3 dias") e no dia do vencimento ("Pagamento vence hoje"), às 9h (horário de Brasília). No dia seguinte, às 9h, se não houver baixa, o aluno recebe "Pagamento em atraso" e a professora, "Pagamento em atraso: {aluno}". O corpo traz a descrição, o valor e o vencimento. A baixa, o cancelamento ou o encerramento do plano cancelam os avisos; mudar o vencimento os refaz. Lembretes cujo horário já passou não são agendados, mas o de atraso sai mesmo para uma cobrança lançada já vencida.
+- **Cobranças**: todos os avisos vão **pelo app e por e-mail**. O e-mail usa o título como assunto e, para o aluno, inclui a chave Pix da professora (ou pede que ele combine o pagamento, se ela não tiver uma).
+  - **Na hora**, quando a professora age: "Novo pagamento" (cobrança avulsa), "Pagamento alterado" (cobrança editada), "Novo plano de pagamento" e "Plano de pagamento alterado". O plano avisa uma vez, com valor e frequência ("R$ 250,00 todo dia 10", "R$ 80,00 toda quarta"), e não uma vez por cobrança. As cobranças que a tarefa agendada gera sozinha não avisam na criação: contam com os lembretes.
+  - **Lembretes**, às 9h (horário de Brasília): "Pagamento vence em 1 mês" (mensal e avulsa; na mesma data do mês anterior, ou no último dia dele), "Pagamento vence em 1 semana" e "Pagamento vence hoje". O plano semanal não tem o de 1 mês.
+  - **Atraso**: no dia seguinte ao vencimento, às 9h, sem baixa, o aluno recebe "Pagamento em atraso" e a professora, "Pagamento em atraso: {aluno}".
+  - A baixa, o cancelamento ou o encerramento do plano cancelam os avisos; mudar o vencimento os refaz. Lembretes cujo horário já passou não são agendados, mas o de atraso sai mesmo para uma cobrança lançada já vencida. Numa nova tentativa da fila, quem já recebeu o e-mail não o recebe de novo.
 - **`dados`**: cada push leva um objeto para o app abrir a tela certa ao tocar na notificação.
   - Recado: `{"tipo": "recado", "recado_id": 41}`.
   - Aula: `{"tipo": "aula_lembrete_semana", "aula_id": 501}`, com `tipo` igual a `aula_lembrete_semana`, `aula_lembrete_dia`, `aula_lembrete_30min`, `aula_cancelada` ou `aulas_canceladas`.
   - Aluno cancelou: `{"tipo": "participacao_cancelada", "aula_id": 501, "aluno_id": 866}`.
   - Atividade: `{"tipo": "atividade_nova", "atividade_id": 397}`, com `tipo` igual a `atividade_nova`, `atividade_editada`, `atividade_lembrete_semana`, `atividade_lembrete_dia` ou `atividade_vence_hoje`.
-  - Cobrança: `{"tipo": "cobranca_vence_hoje", "cobranca_id": 73}`, com `tipo` igual a `cobranca_vence_em_breve`, `cobranca_vence_hoje`, `cobranca_vencida` ou, para a professora, `cobranca_vencida_professor`.
+  - Cobrança: `{"tipo": "cobranca_vence_hoje", "cobranca_id": 73}`, com `tipo` igual a `cobranca_criada`, `cobranca_editada`, `cobranca_vence_em_1_mes`, `cobranca_vence_em_1_semana`, `cobranca_vence_hoje`, `cobranca_vencida` ou, para a professora, `cobranca_vencida_professor`.
+  - Plano: `{"tipo": "plano_criado", "plano_id": 12}`, com `tipo` igual a `plano_criado` ou `plano_editado`.
 
 ---
 

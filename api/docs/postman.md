@@ -1050,11 +1050,11 @@ Use `{{token_aluno}}`. Sem token → `401`; com token de professor → `403`.
 
 Use `{{token_professor}}`. Sem token → `401`; com token de aluno → `403`. Plano ou cobrança de outro professor → `404`.
 
-O aluno paga por Pix, fora do app, e a professora dá a baixa. Valores em centavos: `25000` é R$ 250,00.
+O aluno paga por Pix, fora do app, e a professora dá a baixa. Valores em centavos: `25000` é R$ 250,00. Criar ou editar uma cobrança ou um plano avisa o aluno na hora, pelo app e por e-mail; com `EMAIL_BACKEND=console`, o e-mail aparece no log do servidor.
 
 ### POST `{{base_url}}/financeiro/planos`
 
-**Caminho feliz (mensal)** → `201`. Já gera as cobranças que vencem nos próximos 10 dias.
+**Caminho feliz (mensal)** → `201`. Já gera as cobranças que vencem nos próximos 35 dias.
 
 ```json
 {
