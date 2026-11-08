@@ -234,6 +234,10 @@ def atualizar_cobranca(
         raise _nao_encontrado("Cobrança não encontrada") from None
     except financeiro_service.TransicaoInvalida:
         raise _transicao_invalida("Só cobranças pendentes podem ser editadas") from None
+    except financeiro_service.VencimentoDuplicado:
+        raise _transicao_invalida(
+            "O plano já tem uma cobrança com esse vencimento"
+        ) from None
     return _resposta_cobranca(sessao, cobranca, "Cobrança atualizada")
 
 
@@ -289,7 +293,7 @@ def cancelar_cobranca(
 def resumo(
     professor: ProfessorAtual,
     sessao: SessaoDep,
-    mes: Annotated[str | None, Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")] = None,
+    mes: Annotated[str | None, Query(pattern=r"^[1-9]\d{3}-(0[1-9]|1[0-2])$")] = None,
 ) -> Resposta[ResumoResposta]:
     """Totais do mês (`AAAA-MM`, padrão: o atual) pelo vencimento, em centavos."""
     referencia = mes or hoje().strftime("%Y-%m")

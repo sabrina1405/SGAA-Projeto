@@ -12,6 +12,7 @@ from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import Row, String, case, cast, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 
 from src.core.security import agora
@@ -54,6 +55,10 @@ class TransicaoInvalida(Exception):
     """A cobrança não está no status que a operação exige."""
 
 
+class VencimentoDuplicado(Exception):
+    """O plano já tem uma cobrança nesse vencimento."""
+
+
 # --- vencimentos ---
 
 
@@ -79,6 +84,16 @@ def vencimentos(plano: PlanoCobranca, desde: date, ate: date) -> Iterator[date]:
         if dia >= inicio:
             yield dia
         ano, mes = (ano + 1, 1) if mes == 12 else (ano, mes + 1)
+
+
+def _proximo_periodo(plano: PlanoCobranca, vencimento: date) -> date:
+    """Início do mês ou da semana (segunda) seguinte ao vencimento: cada período
+    tem uma cobrança só, mesmo que o dia de vencimento mude."""
+    if plano.frequencia == FrequenciaPlano.SEMANAL:
+        return vencimento + timedelta(days=7 - vencimento.weekday())
+    if vencimento.month == 12:
+        return date(vencimento.year + 1, 1, 1)
+    return date(vencimento.year, vencimento.month + 1, 1)
 
 
 # --- avisos ---
@@ -183,11 +198,16 @@ RESOLVEDORES: dict[TipoNotificacao, notificacao_service.Resolvedor] = {
 
 
 def _gerar_do_plano(sessao: Session, plano: PlanoCobranca, ate: date) -> int:
-    """Não faz commit. Devolve quantas cobranças criou."""
+    """Não faz commit. Devolve quantas cobranças criou.
+
+    Nunca gera vencimentos antes de hoje: depois de editar o plano, o último
+    vencimento pode ser antigo, e a regra nova só vale daqui para a frente.
+    """
     ultimo = sessao.scalar(
         select(func.max(Cobranca.vencimento)).where(Cobranca.plano_id == plano.id)
     )
-    desde = plano.inicio if ultimo is None else ultimo + timedelta(days=1)
+    desde = plano.inicio if ultimo is None else _proximo_periodo(plano, ultimo)
+    desde = max(desde, hoje())
     datas = list(vencimentos(plano, desde, ate))
     if not datas:
         return 0
@@ -547,12 +567,18 @@ def obter_cobranca(sessao: Session, professor: Usuario, cobranca_id: int) -> Cob
 def atualizar_cobranca(
     sessao: Session, professor: Usuario, cobranca_id: int, campos: dict
 ) -> Cobranca:
-    """Só para pendentes. Levanta CobrancaNaoEncontrada e TransicaoInvalida."""
+    """Só para pendentes. Levanta CobrancaNaoEncontrada, TransicaoInvalida e
+    VencimentoDuplicado, sem alterar nada."""
     cobranca = _cobranca_do_professor(sessao, professor, cobranca_id)
     if cobranca.status != StatusCobranca.PENDENTE:
         raise TransicaoInvalida
     for campo, valor in campos.items():
         setattr(cobranca, campo, valor)
+    try:
+        sessao.flush()
+    except IntegrityError:
+        sessao.rollback()
+        raise VencimentoDuplicado from None
     if "vencimento" in campos:
         _cancelar_avisos(sessao, cobranca.id)
         _agendar_avisos(sessao, cobranca.id, cobranca.vencimento)

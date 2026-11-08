@@ -547,3 +547,90 @@ def test_pagamentos_no_detalhe_do_aluno(
     ).json()["dados"]
     assert [item["id"] for item in dados["pagamentos"]] == [minha["id"]]
     assert dados["pagamentos"][0]["situacao"] == "pendente"
+
+
+# --- revisão: datas ao editar o plano ---
+
+
+def _em(monkeypatch, dia: date) -> None:
+    monkeypatch.setattr(financeiro_service, "hoje", lambda: dia)
+
+
+def _plano_em(sessao, professor, aluno, **campos) -> PlanoCobranca:
+    padrao = {
+        "aluno_id": aluno.id,
+        "descricao": "Mensalidade",
+        "valor_centavos": 25000,
+        "frequencia": FrequenciaPlano.MENSAL,
+        "dia_vencimento": 10,
+        "inicio": date(2030, 10, 1),
+    }
+    return financeiro_service.criar_plano(sessao, professor, **{**padrao, **campos})
+
+
+def test_editar_dia_nao_gera_cobranca_ja_vencida(
+    sessao, professor, aluno_maior, monkeypatch
+):
+    _em(monkeypatch, date(2030, 10, 1))
+    plano = _plano_em(sessao, professor, aluno_maior)
+    _em(monkeypatch, date(2030, 11, 8))
+    financeiro_service.gerar_cobrancas(sessao)
+    assert [c.vencimento for c in _cobrancas(sessao, plano.id)] == [
+        date(2030, 10, 10),
+        date(2030, 11, 10),
+    ]
+
+    # Em 08/11, mudar para o dia 5 não pode criar a de 05/11, já vencida.
+    financeiro_service.atualizar_plano(
+        sessao, professor, plano.id, {"dia_vencimento": 5}
+    )
+    financeiro_service.gerar_cobrancas(sessao, date(2030, 12, 1))
+    assert [c.vencimento for c in _cobrancas(sessao, plano.id)] == [
+        date(2030, 10, 10),
+        date(2030, 12, 5),
+    ]
+
+
+def test_editar_dia_nao_cobra_duas_vezes_no_mesmo_mes(
+    sessao, professor, aluno_maior, monkeypatch
+):
+    _em(monkeypatch, date(2030, 11, 8))
+    plano = _plano_em(sessao, professor, aluno_maior, inicio=date(2030, 11, 8))
+    (adiantada,) = _cobrancas(sessao, plano.id)
+    financeiro_service.pagar(sessao, professor, adiantada.id)
+
+    # A de novembro já foi paga: o dia novo só vale a partir de dezembro.
+    financeiro_service.atualizar_plano(
+        sessao, professor, plano.id, {"dia_vencimento": 15}
+    )
+    financeiro_service.gerar_cobrancas(sessao, date(2030, 12, 10))
+    assert [c.vencimento for c in _cobrancas(sessao, plano.id)] == [
+        date(2030, 11, 10),
+        date(2030, 12, 15),
+    ]
+
+
+def test_vencimento_repetido_no_plano(client, professor, aluno_maior, sessao):
+    plano = _criar_plano(
+        client,
+        professor,
+        aluno_maior,
+        frequencia="semanal",
+        dia_vencimento=hoje().weekday(),
+    )
+    primeira, segunda = _cobrancas(sessao, plano["id"])
+    resposta = client.patch(
+        f"{ROTA}/cobrancas/{segunda.id}",
+        json={"vencimento": primeira.vencimento.isoformat()},
+        headers=cabecalho(professor),
+    )
+    assert resposta.status_code == 409
+    sessao.expire_all()
+    assert sessao.get(Cobranca, segunda.id).vencimento == segunda.vencimento
+
+
+def test_resumo_com_ano_zero(client, professor):
+    resposta = client.get(
+        f"{ROTA}/resumo", params={"mes": "0000-05"}, headers=cabecalho(professor)
+    )
+    assert resposta.status_code == 422
