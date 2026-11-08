@@ -533,6 +533,9 @@ def adicionar_arquivos(
 
     Levanta PastaNaoEncontrada e ArquivosInvalidos, sem alterar nada.
     """
+    # Sem a trava, uma exclusão simultânea deixaria o arquivo preso a uma pasta
+    # excluída, fora do alcance da limpeza do Drive.
+    _travar_arvore(sessao, professor.id)
     pasta = _pasta_do_professor(sessao, professor, pasta_id)
     arquivo_service.validar_para_vincular(sessao, professor, arquivo_ids)
     sessao.execute(
@@ -573,6 +576,7 @@ def mover_arquivo(
     destino_id: int,
 ) -> Pasta:
     """Levanta PastaNaoEncontrada, ArquivoForaDaPasta e PastaInvalida."""
+    _travar_arvore(sessao, professor.id)
     pasta = _pasta_do_professor(sessao, professor, pasta_id)
     anexo = _anexo(sessao, pasta, arquivo_id)
     destino = _pasta_de_destino(sessao, professor, destino_id, "pasta_id")
