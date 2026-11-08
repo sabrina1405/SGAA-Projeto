@@ -284,11 +284,11 @@ Campos que o aluno pode editar:
 | `POST /v1/arquivos/{id}/confirmar` | Confere o arquivo no Drive e cria o link. |
 | `DELETE /v1/arquivos/{id}` | Descarta um arquivo ainda não salvo. |
 
-- **Fluxo**: o arquivo sobe **antes** de salvar o formulário, em três passos: abrir a sessão, mandar o conteúdo com `PUT` direto à `url_upload` (a resposta do Google traz o `id`, sem passar pela API) e confirmar com esse valor em `drive_file_id`. Depois, a atividade ou a entrega recebe os ids em `arquivo_ids`. Detalhes em [Google Drive](../../api/docs/google_drive.md).
+- **Fluxo**: o arquivo sobe **antes** de salvar o formulário, em três passos: abrir a sessão, mandar o conteúdo com `PUT` direto à `url_upload` (a resposta do Google traz o `id`, sem passar pela API) e confirmar com esse valor em `drive_file_id`. Depois, a atividade, a entrega ou a pasta de materiais recebe os ids em `arquivo_ids`. Detalhes em [Google Drive](../../api/docs/google_drive.md).
 - **Limites**: até 5 MB (`tamanho` em bytes), e até 10 arquivos enviados e não salvos por usuário (`409`; uma sessão descartada antes do envio continua contando por até 7 dias, enquanto a URL de envio do Drive ainda aceita o conteúdo). Tipos aceitos: PDF, PNG, JPEG, WebP, texto puro, Word, Excel e PowerPoint. Fora disso, `422` com `tipo` igual a `arquivo_muito_grande` ou `tipo_nao_permitido`.
 - **Confirmação**: vale o que está no Drive, e não o declarado. Arquivo fora dos limites responde `422` e é apagado. Arquivo que não existe ou é de outra sessão responde `422` com `tipo` igual a `arquivo_nao_enviado`. Repetir a confirmação é seguro: use em caso de `503` ou timeout.
 - **Dono**: cada usuário vê e altera só os próprios arquivos. Os de outro usuário respondem `404`.
-- **Link**: `url` abre o arquivo para quem tem o link, sem login. A API só o entrega a quem tem acesso à atividade.
+- **Link**: `url` abre o arquivo para quem tem o link, sem login. A API só o entrega a quem tem acesso à atividade ou à pasta.
 - **Descartar**: arquivo já salvo responde `409`; ele sai pela edição ou exclusão da atividade ou entrega.
 - **Sem vínculo**: arquivo pendente há mais de 1 hora, ou confirmado e não salvo há mais de 24 horas, é apagado.
 - **Drive indisponível**: `503`, sem gravar nada.
@@ -327,6 +327,35 @@ Campos que o aluno pode editar:
 - **Entrega**: `resposta` é obrigatória, até 5000 caracteres. `arquivo_ids` é opcional, até 3, e só vale com `permite_envio_arquivo` ligado; do contrário, `422` com `tipo` igual a `envio_de_arquivo_desligado`.
 - **Edição**: até o vencimento. `arquivo_ids` enviado substitui os arquivos; ausente, mantém. Depois do vencimento, `409`.
 - **Atraso**: vencida, a atividade ainda aceita a primeira entrega, com `status` igual a `entregue_com_atraso`. Por isso, envie os arquivos antes e mande tudo na mesma chamada.
+
+### Pastas (professor)
+
+| Rota | Resultado |
+| --- | --- |
+| `POST /v1/pastas` | Cria uma pasta. Sem `pasta_pai_id`, é raiz. |
+| `GET /v1/pastas` | Pastas raiz; com `?pasta_pai_id=`, as subpastas. Ordem alfabética, paginado. |
+| `GET /v1/pastas/{id}` | Subpastas, materiais, caminho desde a raiz e destinatários. |
+| `PATCH /v1/pastas/{id}` | Renomeia, troca os destinatários ou move a pasta. |
+| `DELETE /v1/pastas/{id}` | Exclui a pasta, as subpastas e os materiais delas. |
+| `POST /v1/pastas/{id}/arquivos` | Guarda arquivos já confirmados (até 20 por chamada). |
+| `PATCH /v1/pastas/{id}/arquivos/{arquivo_id}` | Move o material para outra pasta (`pasta_id`). |
+| `DELETE /v1/pastas/{id}/arquivos/{arquivo_id}` | Tira o material da pasta e o apaga do Drive. |
+
+- **Árvore**: subpastas em qualquer nível, até 20 níveis. Nome único no mesmo lugar, sem diferenciar maiúsculas (`409`).
+- **Destinatários**: definidos só na pasta raiz (`todos_alunos`, `todos_grupos`, `grupo_ids`, `aluno_ids`) e valem para todas as subpastas. Em subpasta, `422` com `tipo` igual a `destinatarios_so_na_raiz`. Sem destinatário, a pasta fica só com a professora.
+- **Mover**: `pasta_pai_id` leva a pasta, com tudo dentro, para outro lugar; nulo a leva para a raiz. Para dentro dela mesma, `422` com `tipo` igual a `ciclo`. Uma raiz que vira subpasta passa a seguir os destinatários da nova raiz; uma subpasta que vira raiz começa sem destinatários.
+- **Materiais**: o arquivo sobe pelas rotas de Arquivos e entra na pasta com `arquivo_ids`. Cada arquivo fica em um lugar só; o que já está em uma atividade, entrega ou pasta responde `422`.
+- **Dono**: pasta de outro professor responde `404`; usada como `pasta_pai_id` ou `pasta_id`, `422`.
+
+### Materiais (aluno)
+
+| Rota | Resultado |
+| --- | --- |
+| `GET /v1/meus-materiais` | Pastas raiz liberadas ao aluno, com o nome da professora. |
+| `GET /v1/meus-materiais/{id}` | Subpastas e materiais (com a `url`) de uma pasta liberada. |
+
+- **Quem vê**: a pasta raiz liberada para todos os alunos, para todos os grupos da professora, para um grupo do aluno ou para o aluno diretamente. As subpastas seguem a raiz.
+- **Sair do grupo**: o acesso acaba na hora. Pasta não liberada ou excluída responde `404`.
 
 ### Notificações push
 

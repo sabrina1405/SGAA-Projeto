@@ -872,6 +872,178 @@ Use `{{token_aluno}}`. Com o token da professora, a resposta é `403`.
 
 ---
 
+## Pastas (professor)
+
+Use `{{token_professor}}`. Sem token → `401`; com token de aluno → `403`. Pasta de outro professor → `404`.
+
+As pastas podem ter subpastas. Os destinatários ficam na pasta raiz e valem para todas as subpastas. Para guardar uma apostila, envie o arquivo pelas rotas de [Arquivos](#arquivos) e depois adicione-o à pasta.
+
+### POST `{{base_url}}/pastas`
+
+**Caminho feliz (raiz)** → `201`
+
+```json
+{
+  "nome": "Apostilas",
+  "grupo_ids": [1],
+  "aluno_ids": [3]
+}
+```
+
+**Caminho feliz (subpasta)** → `201`
+
+```json
+{
+  "nome": "Módulo 1",
+  "pasta_pai_id": 1
+}
+```
+
+**Erro: destinatários em uma subpasta** → `422`
+
+```json
+{
+  "nome": "Módulo 2",
+  "pasta_pai_id": 1,
+  "todos_alunos": true
+}
+```
+
+**Erro: todos os alunos e alunos avulsos** → `422`
+
+```json
+{
+  "nome": "Listas",
+  "todos_alunos": true,
+  "aluno_ids": [3]
+}
+```
+
+- Erro: nome repetido no mesmo lugar, sem diferenciar maiúsculas → `409`.
+- Erro: `pasta_pai_id` de outro professor → `422`.
+- Erro: grupo de outro professor → `422`.
+- Erro: passar de 20 níveis → `422`.
+
+### GET `{{base_url}}/pastas?pagina=1&tamanho=20`
+
+Lista as pastas raiz. Com `pasta_pai_id`, lista as subpastas dela: `{{base_url}}/pastas?pasta_pai_id=1`.
+
+- Erro: `pasta_pai_id` de outro professor → `404`.
+
+### GET `{{base_url}}/pastas/{pasta_id}`
+
+Devolve as subpastas, os materiais, o caminho desde a raiz e os destinatários da raiz.
+
+### PATCH `{{base_url}}/pastas/{pasta_id}`
+
+**Caminho feliz: renomear** → `200`
+
+```json
+{
+  "nome": "Listas de exercícios"
+}
+```
+
+**Caminho feliz: mover para dentro de outra pasta** → `200`. Uma raiz que vira subpasta passa a seguir os destinatários da nova raiz.
+
+```json
+{
+  "pasta_pai_id": 5
+}
+```
+
+**Caminho feliz: levar para a raiz** → `200`. Começa sem destinatários.
+
+```json
+{
+  "pasta_pai_id": null
+}
+```
+
+**Erro: mover para dentro dela mesma ou de uma subpasta dela** → `422`
+
+```json
+{
+  "pasta_pai_id": 2
+}
+```
+
+**Erro: corpo vazio** → `422`
+
+```json
+{}
+```
+
+- Erro: nome repetido no destino → `409`.
+- Erro: destinatários em uma subpasta → `422`.
+
+### DELETE `{{base_url}}/pastas/{pasta_id}`
+
+**Caminho feliz** → `200`. Exclui também as subpastas, e os materiais delas são apagados do Drive pela tarefa agendada.
+
+### POST `{{base_url}}/pastas/{pasta_id}/arquivos`
+
+**Caminho feliz** → `200`. Até 20 arquivos por chamada.
+
+```json
+{
+  "arquivo_ids": [10, 11]
+}
+```
+
+**Erro: arquivo de outro usuário, não confirmado ou já guardado em outro lugar** → `422`
+
+```json
+{
+  "arquivo_ids": [99]
+}
+```
+
+**Erro: lista vazia** → `422`
+
+```json
+{
+  "arquivo_ids": []
+}
+```
+
+### PATCH `{{base_url}}/pastas/{pasta_id}/arquivos/{arquivo_id}`
+
+**Caminho feliz** → `200`. Devolve a pasta de destino.
+
+```json
+{
+  "pasta_id": 5
+}
+```
+
+- Erro: material que não está nesta pasta → `404`.
+- Erro: pasta de destino de outro professor → `422`.
+
+### DELETE `{{base_url}}/pastas/{pasta_id}/arquivos/{arquivo_id}`
+
+**Caminho feliz** → `200`. O material é apagado do Drive pela tarefa agendada.
+
+- Erro: material que não está nesta pasta → `404`.
+
+---
+
+## Materiais (aluno)
+
+Use `{{token_aluno}}`. Sem token → `401`; com token de professor → `403`.
+
+### GET `{{base_url}}/meus-materiais?pagina=1&tamanho=20`
+
+Pastas raiz liberadas ao aluno: para todos os alunos, para os grupos dele, para todos os grupos da professora ou para ele diretamente.
+
+### GET `{{base_url}}/meus-materiais/{pasta_id}`
+
+Subpastas e materiais (com a `url` do Drive) de uma pasta liberada.
+
+- Erro: pasta não liberada ao aluno, inclusive depois de ele sair do grupo → `404`.
+
+---
+
 ## Dispositivos (push)
 
 Vale para os dois tipos de usuário: use `{{token_aluno}}` ou `{{token_professor}}`. Sem token → `401`.
