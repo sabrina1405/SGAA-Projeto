@@ -21,6 +21,7 @@ from src.models.grupo import Grupo, GrupoAluno
 from src.models.material import AnexoPasta, Pasta, PastaAluno, PastaGrupo
 from src.models.notificacao import (
     Dispositivo,
+    EnvioEmail,
     EnvioPush,
     Notificacao,
     StatusEnvio,
@@ -46,6 +47,7 @@ __all__ = [
     "CodigoVerificacao",
     "Dispositivo",
     "EntregaAtividade",
+    "EnvioEmail",
     "EnvioPush",
     "FrequenciaPlano",
     "Grupo",

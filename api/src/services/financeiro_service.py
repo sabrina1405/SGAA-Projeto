@@ -31,15 +31,31 @@ from src.services.usuario_service import validar_alunos
 
 logger = logging.getLogger(__name__)
 
-# Gera com antecedência suficiente para o aviso de 3 dias antes.
-HORIZONTE = timedelta(days=10)
+# Gera com antecedência suficiente para o aviso de 1 mês antes.
+HORIZONTE = timedelta(days=35)
 HORA_DO_AVISO = time(9, tzinfo=HORARIO_DE_BRASILIA)
 
-TIPOS_DE_AVISO = (
-    TipoNotificacao.COBRANCA_VENCE_EM_BREVE,
+LEMBRETES = (
+    TipoNotificacao.COBRANCA_VENCE_EM_1_MES,
+    TipoNotificacao.COBRANCA_VENCE_EM_1_SEMANA,
     TipoNotificacao.COBRANCA_VENCE_HOJE,
+)
+TIPOS_DA_COBRANCA = (
+    TipoNotificacao.COBRANCA_CRIADA,
+    TipoNotificacao.COBRANCA_EDITADA,
+    *LEMBRETES,
     TipoNotificacao.COBRANCA_VENCIDA,
     TipoNotificacao.COBRANCA_VENCIDA_PROFESSOR,
+)
+TIPOS_DO_PLANO = (TipoNotificacao.PLANO_CRIADO, TipoNotificacao.PLANO_EDITADO)
+DIAS_DA_SEMANA = (
+    "toda segunda",
+    "toda terça",
+    "toda quarta",
+    "toda quinta",
+    "toda sexta",
+    "todo sábado",
+    "todo domingo",
 )
 
 
@@ -103,29 +119,54 @@ def _momento(dia: date) -> datetime:
     return datetime.combine(dia, HORA_DO_AVISO)
 
 
-def _agendar_avisos(sessao: Session, cobranca_id: int, vencimento: date) -> None:
+def _um_mes_antes(dia: date) -> date:
+    ano, mes = (dia.year - 1, 12) if dia.month == 1 else (dia.year, dia.month - 1)
+    return _vencimento_mensal(ano, mes, dia.day)
+
+
+def _agendar_avisos(
+    sessao: Session, cobranca_id: int, vencimento: date, *, semanal: bool = False
+) -> None:
+    """Lembretes de 1 mês (fora do semanal), 1 semana e no dia, e o de atraso no
+    dia seguinte. Os lembretes que já passaram não são agendados."""
     momento = agora()
-    vencida = _momento(vencimento + timedelta(days=1))
     candidatos = {
-        TipoNotificacao.COBRANCA_VENCE_EM_BREVE: _momento(
-            vencimento - timedelta(days=3)
+        TipoNotificacao.COBRANCA_VENCE_EM_1_SEMANA: _momento(
+            vencimento - timedelta(weeks=1)
         ),
         TipoNotificacao.COBRANCA_VENCE_HOJE: _momento(vencimento),
     }
+    if not semanal:
+        candidatos[TipoNotificacao.COBRANCA_VENCE_EM_1_MES] = _momento(
+            _um_mes_antes(vencimento)
+        )
     for tipo, enviar_em in candidatos.items():
         if enviar_em > momento:
             notificacao_service.agendar(sessao, tipo, cobranca_id, enviar_em)
-    # O de vencida sai mesmo se a data já passou: a cobrança está em atraso.
+    # O de atraso sai mesmo se a data já passou: a cobrança está em atraso.
+    vencida = max(_momento(vencimento + timedelta(days=1)), momento)
     for tipo in (
         TipoNotificacao.COBRANCA_VENCIDA,
         TipoNotificacao.COBRANCA_VENCIDA_PROFESSOR,
     ):
-        notificacao_service.agendar(sessao, tipo, cobranca_id, max(vencida, momento))
+        notificacao_service.agendar(sessao, tipo, cobranca_id, vencida)
 
 
 def _cancelar_avisos(sessao: Session, cobranca_id: int) -> None:
-    for tipo in TIPOS_DE_AVISO:
+    for tipo in TIPOS_DA_COBRANCA:
         notificacao_service.cancelar_pendentes(sessao, tipo, cobranca_id)
+
+
+def _avisar_agora(sessao: Session, tipo: TipoNotificacao, referencia_id: int):
+    """Aviso de criação ou edição. Não faz commit; o id existe depois dele."""
+    return notificacao_service.agendar(sessao, tipo, referencia_id, agora())
+
+
+def _semanal(sessao: Session, cobranca: Cobranca) -> bool:
+    if cobranca.plano_id is None:
+        return False
+    plano = sessao.get(PlanoCobranca, cobranca.plano_id)
+    return plano.frequencia == FrequenciaPlano.SEMANAL
 
 
 def formatar_valor(centavos: int) -> str:
@@ -133,15 +174,50 @@ def formatar_valor(centavos: int) -> str:
     return f"R$ {reais},{centavos % 100:02d}"
 
 
+def _periodicidade(plano: PlanoCobranca) -> str:
+    if plano.frequencia == FrequenciaPlano.SEMANAL:
+        return DIAS_DA_SEMANA[plano.dia_vencimento]
+    return f"todo dia {plano.dia_vencimento}"
+
+
 _TITULOS: dict[TipoNotificacao, str] = {
-    TipoNotificacao.COBRANCA_VENCE_EM_BREVE: "Pagamento vence em 3 dias",
+    TipoNotificacao.COBRANCA_CRIADA: "Novo pagamento",
+    TipoNotificacao.COBRANCA_EDITADA: "Pagamento alterado",
+    TipoNotificacao.COBRANCA_VENCE_EM_1_MES: "Pagamento vence em 1 mês",
+    TipoNotificacao.COBRANCA_VENCE_EM_1_SEMANA: "Pagamento vence em 1 semana",
     TipoNotificacao.COBRANCA_VENCE_HOJE: "Pagamento vence hoje",
     TipoNotificacao.COBRANCA_VENCIDA: "Pagamento em atraso",
     TipoNotificacao.COBRANCA_VENCIDA_PROFESSOR: "Pagamento em atraso",
+    TipoNotificacao.PLANO_CRIADO: "Novo plano de pagamento",
+    TipoNotificacao.PLANO_EDITADO: "Plano de pagamento alterado",
 }
 
+RODAPE_DO_EMAIL = "\n\nEste é um aviso automático do SGAA. Não responda este e-mail."
 
-def _resolvedor(tipo: TipoNotificacao) -> notificacao_service.Resolvedor:
+
+def _ativos(sessao: Session, professor_id: int, aluno_id: int):
+    """A professora e o aluno, ou None se algum foi excluído."""
+    professor = sessao.get(Usuario, professor_id)
+    aluno = sessao.get(Usuario, aluno_id)
+    if any(
+        usuario is None or usuario.deletado_em is not None
+        for usuario in (professor, aluno)
+    ):
+        return None
+    return professor, aluno
+
+
+def _email_do_aluno(sessao: Session, professor: Usuario, corpo: str) -> str:
+    chave_pix = sessao.get(Professor, professor.id).chave_pix
+    pagamento = (
+        f"Pague pelo Pix: {chave_pix}"
+        if chave_pix
+        else f"Combine o pagamento com {professor.nome_completo}."
+    )
+    return f"{corpo}.\n\n{pagamento}{RODAPE_DO_EMAIL}"
+
+
+def _resolvedor_da_cobranca(tipo: TipoNotificacao) -> notificacao_service.Resolvedor:
     def resolver(
         sessao: Session, cobranca_id: int
     ) -> notificacao_service.Conteudo | None:
@@ -152,45 +228,70 @@ def _resolvedor(tipo: TipoNotificacao) -> notificacao_service.Resolvedor:
             or cobranca.status != StatusCobranca.PENDENTE
         ):
             return None
-        lembrete = tipo in (
-            TipoNotificacao.COBRANCA_VENCE_EM_BREVE,
-            TipoNotificacao.COBRANCA_VENCE_HOJE,
-        )
         # Cobre uma nova tentativa que só saiu depois do vencimento.
-        if lembrete and cobranca.vencimento < hoje():
+        if tipo in LEMBRETES and cobranca.vencimento < hoje():
             return None
-        professor = sessao.get(Usuario, cobranca.professor_id)
-        aluno = sessao.get(Usuario, cobranca.aluno_id)
-        if any(
-            usuario is None or usuario.deletado_em is not None
-            for usuario in (professor, aluno)
-        ):
+        pessoas = _ativos(sessao, cobranca.professor_id, cobranca.aluno_id)
+        if pessoas is None:
             return None
+        professor, aluno = pessoas
         valor = formatar_valor(cobranca.valor_centavos)
         data = cobranca.vencimento.strftime("%d/%m")
         dados = {"tipo": tipo.value, "cobranca_id": cobranca.id}
         if tipo == TipoNotificacao.COBRANCA_VENCIDA_PROFESSOR:
+            corpo = f"{cobranca.descricao}, {valor}, venceu em {data}"
             return notificacao_service.Conteudo(
                 usuario_ids=[professor.id],
                 titulo=f"{_TITULOS[tipo]}: {aluno.nome_completo}",
-                corpo=f"{cobranca.descricao}, {valor}, venceu em {data}",
+                corpo=corpo,
                 dados=dados,
+                email=True,
+                corpo_email=f"{corpo}.{RODAPE_DO_EMAIL}",
             )
+        corpo = (
+            f"{cobranca.descricao}, {valor}, vencimento em {data}, "
+            f"com {professor.nome_completo}"
+        )
         return notificacao_service.Conteudo(
             usuario_ids=[aluno.id],
             titulo=_TITULOS[tipo],
-            corpo=(
-                f"{cobranca.descricao}, {valor}, vencimento em {data}, "
-                f"com {professor.nome_completo}"
-            ),
+            corpo=corpo,
             dados=dados,
+            email=True,
+            corpo_email=_email_do_aluno(sessao, professor, corpo),
+        )
+
+    return resolver
+
+
+def _resolvedor_do_plano(tipo: TipoNotificacao) -> notificacao_service.Resolvedor:
+    def resolver(sessao: Session, plano_id: int) -> notificacao_service.Conteudo | None:
+        plano = sessao.get(PlanoCobranca, plano_id)
+        if plano is None or plano.deletado_em is not None:
+            return None
+        pessoas = _ativos(sessao, plano.professor_id, plano.aluno_id)
+        if pessoas is None:
+            return None
+        professor, aluno = pessoas
+        corpo = (
+            f"{plano.descricao}, {formatar_valor(plano.valor_centavos)} "
+            f"{_periodicidade(plano)}, com {professor.nome_completo}"
+        )
+        return notificacao_service.Conteudo(
+            usuario_ids=[aluno.id],
+            titulo=_TITULOS[tipo],
+            corpo=corpo,
+            dados={"tipo": tipo.value, "plano_id": plano.id},
+            email=True,
+            corpo_email=_email_do_aluno(sessao, professor, corpo),
         )
 
     return resolver
 
 
 RESOLVEDORES: dict[TipoNotificacao, notificacao_service.Resolvedor] = {
-    tipo: _resolvedor(tipo) for tipo in TIPOS_DE_AVISO
+    **{tipo: _resolvedor_da_cobranca(tipo) for tipo in TIPOS_DA_COBRANCA},
+    **{tipo: _resolvedor_do_plano(tipo) for tipo in TIPOS_DO_PLANO},
 }
 
 
@@ -231,7 +332,12 @@ def _gerar_do_plano(sessao: Session, plano: PlanoCobranca, ate: date) -> int:
         .returning(Cobranca.id, Cobranca.vencimento)
     ).all()
     for cobranca_id, vencimento in criadas:
-        _agendar_avisos(sessao, cobranca_id, vencimento)
+        _agendar_avisos(
+            sessao,
+            cobranca_id,
+            vencimento,
+            semanal=plano.frequencia == FrequenciaPlano.SEMANAL,
+        )
     return len(criadas)
 
 
@@ -292,8 +398,9 @@ def criar_plano(
     dia_vencimento: int,
     inicio: date,
     fim: date | None = None,
-) -> PlanoCobranca:
-    """Já gera as cobranças que vencem nos próximos dias.
+) -> tuple[PlanoCobranca, int]:
+    """Já gera as cobranças que vencem nos próximos dias. Devolve o plano e o id
+    do aviso ao aluno, que sai na hora.
 
     Levanta AlunosInvalidos, sem criar o plano.
     """
@@ -311,8 +418,9 @@ def criar_plano(
     sessao.add(plano)
     sessao.flush()
     _gerar_do_plano(sessao, plano, hoje() + HORIZONTE)
+    aviso = _avisar_agora(sessao, TipoNotificacao.PLANO_CRIADO, plano.id)
     sessao.commit()
-    return plano
+    return plano, aviso.id
 
 
 _ALUNO = aliased(Usuario)
@@ -390,9 +498,10 @@ def _descartar_futuras(sessao: Session, plano: PlanoCobranca) -> None:
 
 def atualizar_plano(
     sessao: Session, professor: Usuario, plano_id: int, campos: dict
-) -> PlanoCobranca:
+) -> tuple[PlanoCobranca, int]:
     """Altera os campos presentes em `campos`. As cobranças ainda não vencidas
-    seguem a mudança; as vencidas e as pagas ficam como estão.
+    seguem a mudança; as vencidas e as pagas ficam como estão. Devolve o plano e
+    o id do aviso ao aluno, que sai na hora.
 
     Levanta PlanoNaoEncontrado e ValueError (dia ou fim incompatíveis).
     """
@@ -421,8 +530,10 @@ def atualizar_plano(
         )
     sessao.flush()
     _gerar_do_plano(sessao, plano, hoje() + HORIZONTE)
+    # Um aviso pelo plano, e não um por cobrança alterada.
+    aviso = _avisar_agora(sessao, TipoNotificacao.PLANO_EDITADO, plano.id)
     sessao.commit()
-    return plano
+    return plano, aviso.id
 
 
 def encerrar_plano(sessao: Session, professor: Usuario, plano_id: int) -> None:
@@ -506,8 +617,9 @@ def criar_cobranca(
     descricao: str,
     valor_centavos: int,
     vencimento: date,
-) -> Cobranca:
-    """Cobrança avulsa. Levanta AlunosInvalidos, sem criar nada."""
+) -> tuple[Cobranca, int]:
+    """Cobrança avulsa. Devolve a cobrança e o id do aviso ao aluno, que sai na
+    hora. Levanta AlunosInvalidos, sem criar nada."""
     validar_alunos(sessao, [aluno_id])
     cobranca = Cobranca(
         professor_id=professor.id,
@@ -519,8 +631,9 @@ def criar_cobranca(
     sessao.add(cobranca)
     sessao.flush()
     _agendar_avisos(sessao, cobranca.id, vencimento)
+    aviso = _avisar_agora(sessao, TipoNotificacao.COBRANCA_CRIADA, cobranca.id)
     sessao.commit()
-    return cobranca
+    return cobranca, aviso.id
 
 
 def listar_cobrancas(
@@ -566,9 +679,12 @@ def obter_cobranca(sessao: Session, professor: Usuario, cobranca_id: int) -> Cob
 
 def atualizar_cobranca(
     sessao: Session, professor: Usuario, cobranca_id: int, campos: dict
-) -> Cobranca:
-    """Só para pendentes. Levanta CobrancaNaoEncontrada, TransicaoInvalida e
-    VencimentoDuplicado, sem alterar nada."""
+) -> tuple[Cobranca, int]:
+    """Só para pendentes. Devolve a cobrança e o id do aviso ao aluno, que sai
+    na hora.
+
+    Levanta CobrancaNaoEncontrada, TransicaoInvalida e VencimentoDuplicado, sem
+    alterar nada."""
     cobranca = _cobranca_do_professor(sessao, professor, cobranca_id)
     if cobranca.status != StatusCobranca.PENDENTE:
         raise TransicaoInvalida
@@ -581,9 +697,15 @@ def atualizar_cobranca(
         raise VencimentoDuplicado from None
     if "vencimento" in campos:
         _cancelar_avisos(sessao, cobranca.id)
-        _agendar_avisos(sessao, cobranca.id, cobranca.vencimento)
+        _agendar_avisos(
+            sessao,
+            cobranca.id,
+            cobranca.vencimento,
+            semanal=_semanal(sessao, cobranca),
+        )
+    aviso = _avisar_agora(sessao, TipoNotificacao.COBRANCA_EDITADA, cobranca.id)
     sessao.commit()
-    return cobranca
+    return cobranca, aviso.id
 
 
 def pagar(
@@ -610,7 +732,9 @@ def reabrir(sessao: Session, professor: Usuario, cobranca_id: int) -> Cobranca:
         raise TransicaoInvalida
     cobranca.status = StatusCobranca.PENDENTE
     cobranca.paga_em = None
-    _agendar_avisos(sessao, cobranca.id, cobranca.vencimento)
+    _agendar_avisos(
+        sessao, cobranca.id, cobranca.vencimento, semanal=_semanal(sessao, cobranca)
+    )
     sessao.commit()
     return cobranca
 

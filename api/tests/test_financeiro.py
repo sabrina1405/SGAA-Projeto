@@ -10,6 +10,7 @@ from src.models.financeiro import (
     StatusCobranca,
 )
 from src.models.notificacao import Notificacao, TipoNotificacao
+from src.models.professor import Professor
 from src.schemas.aluno import hoje
 from src.services import financeiro_service
 from tests.conftest import cabecalho
@@ -142,7 +143,10 @@ def test_plano_gera_as_cobrancas_dos_proximos_dias(
     plano = _criar_plano(client, professor, aluno_maior)
     assert plano["aluno_nome"] == aluno_maior.nome_completo
     cobrancas = _cobrancas(sessao, plano["id"])
-    assert [cobranca.vencimento for cobranca in cobrancas] == [hoje()]
+    # A de hoje e a do mês seguinte, que cabe nos 35 dias de antecedência.
+    assert len(cobrancas) == 2
+    assert cobrancas[0].vencimento == hoje()
+    assert cobrancas[1].vencimento.day <= hoje().day
     assert cobrancas[0].valor_centavos == 25000
 
     # Rodar de novo não duplica.
@@ -160,7 +164,7 @@ def test_plano_semanal(client, professor, aluno_maior, sessao):
         dia_vencimento=hoje().weekday(),
     )
     datas = [cobranca.vencimento for cobranca in _cobrancas(sessao, plano["id"])]
-    assert datas == [hoje(), hoje() + timedelta(weeks=1)]
+    assert datas == [hoje() + timedelta(weeks=semanas) for semanas in range(6)]
 
 
 @pytest.mark.parametrize(
@@ -217,7 +221,7 @@ def test_editar_plano_muda_so_as_nao_vencidas(
     plano = _criar_plano(client, professor, aluno_maior)
     # Gera a cobrança do mês seguinte também.
     financeiro_service.gerar_cobrancas(sessao, hoje() + timedelta(days=31))
-    atual, seguinte = _cobrancas(sessao, plano["id"])
+    atual, seguinte, *_ = _cobrancas(sessao, plano["id"])
 
     # Simula que a de hoje já venceu.
     amanha = hoje() + timedelta(days=1)
@@ -264,7 +268,7 @@ def test_encerrar_plano_cancela_as_nao_vencidas(
 ):
     plano = _criar_plano(client, professor, aluno_maior)
     financeiro_service.gerar_cobrancas(sessao, hoje() + timedelta(days=31))
-    atual, seguinte = _cobrancas(sessao, plano["id"])
+    atual, seguinte, *_ = _cobrancas(sessao, plano["id"])
 
     amanha = hoje() + timedelta(days=1)
     monkeypatch.setattr(financeiro_service, "hoje", lambda: amanha)
@@ -448,7 +452,13 @@ def _avisos(sessao, cobranca_id):
         for notificacao in sessao.scalars(
             select(Notificacao).where(
                 Notificacao.referencia_id == cobranca_id,
-                Notificacao.tipo.like("cobranca_%"),
+                Notificacao.tipo.in_(
+                    [
+                        *financeiro_service.LEMBRETES,
+                        TipoNotificacao.COBRANCA_VENCIDA,
+                        TipoNotificacao.COBRANCA_VENCIDA_PROFESSOR,
+                    ]
+                ),
                 Notificacao.deletado_em.is_(None),
             )
         )
@@ -456,12 +466,15 @@ def _avisos(sessao, cobranca_id):
 
 
 def test_avisos_agendados(client, professor, aluno_maior, sessao):
-    vencimento = hoje() + timedelta(days=10)
+    vencimento = hoje() + timedelta(days=45)
     cobranca = _avulsa(client, professor, aluno_maior, vencimento=vencimento)
     avisos = _avisos(sessao, cobranca["id"])
     brasilia = financeiro_service.HORARIO_DE_BRASILIA
     esperado = {
-        TipoNotificacao.COBRANCA_VENCE_EM_BREVE: vencimento - timedelta(days=3),
+        TipoNotificacao.COBRANCA_VENCE_EM_1_MES: financeiro_service._um_mes_antes(
+            vencimento
+        ),
+        TipoNotificacao.COBRANCA_VENCE_EM_1_SEMANA: vencimento - timedelta(weeks=1),
         TipoNotificacao.COBRANCA_VENCE_HOJE: vencimento,
         TipoNotificacao.COBRANCA_VENCIDA: vencimento + timedelta(days=1),
         TipoNotificacao.COBRANCA_VENCIDA_PROFESSOR: vencimento + timedelta(days=1),
@@ -520,7 +533,7 @@ def test_lembrete_nao_sai_depois_do_vencimento(client, professor, aluno_maior, s
     )
     resolvedores = financeiro_service.RESOLVEDORES
     assert (
-        resolvedores[TipoNotificacao.COBRANCA_VENCE_EM_BREVE](sessao, cobranca["id"])
+        resolvedores[TipoNotificacao.COBRANCA_VENCE_EM_1_SEMANA](sessao, cobranca["id"])
         is None
     )
     assert (
@@ -565,7 +578,8 @@ def _plano_em(sessao, professor, aluno, **campos) -> PlanoCobranca:
         "dia_vencimento": 10,
         "inicio": date(2030, 10, 1),
     }
-    return financeiro_service.criar_plano(sessao, professor, **{**padrao, **campos})
+    plano, _ = financeiro_service.criar_plano(sessao, professor, **{**padrao, **campos})
+    return plano
 
 
 def test_editar_dia_nao_gera_cobranca_ja_vencida(
@@ -578,6 +592,7 @@ def test_editar_dia_nao_gera_cobranca_ja_vencida(
     assert [c.vencimento for c in _cobrancas(sessao, plano.id)] == [
         date(2030, 10, 10),
         date(2030, 11, 10),
+        date(2030, 12, 10),
     ]
 
     # Em 08/11, mudar para o dia 5 não pode criar a de 05/11, já vencida.
@@ -588,6 +603,7 @@ def test_editar_dia_nao_gera_cobranca_ja_vencida(
     assert [c.vencimento for c in _cobrancas(sessao, plano.id)] == [
         date(2030, 10, 10),
         date(2030, 12, 5),
+        date(2031, 1, 5),
     ]
 
 
@@ -596,7 +612,7 @@ def test_editar_dia_nao_cobra_duas_vezes_no_mesmo_mes(
 ):
     _em(monkeypatch, date(2030, 11, 8))
     plano = _plano_em(sessao, professor, aluno_maior, inicio=date(2030, 11, 8))
-    (adiantada,) = _cobrancas(sessao, plano.id)
+    adiantada, _ = _cobrancas(sessao, plano.id)
     financeiro_service.pagar(sessao, professor, adiantada.id)
 
     # A de novembro já foi paga: o dia novo só vale a partir de dezembro.
@@ -618,7 +634,7 @@ def test_vencimento_repetido_no_plano(client, professor, aluno_maior, sessao):
         frequencia="semanal",
         dia_vencimento=hoje().weekday(),
     )
-    primeira, segunda = _cobrancas(sessao, plano["id"])
+    primeira, segunda, *_ = _cobrancas(sessao, plano["id"])
     resposta = client.patch(
         f"{ROTA}/cobrancas/{segunda.id}",
         json={"vencimento": primeira.vencimento.isoformat()},
@@ -634,3 +650,105 @@ def test_resumo_com_ano_zero(client, professor):
         f"{ROTA}/resumo", params={"mes": "0000-05"}, headers=cabecalho(professor)
     )
     assert resposta.status_code == 422
+
+
+# --- avisos da issue: 1 mês, 1 semana, no dia, atraso, criação e edição ---
+
+
+def test_um_mes_antes_ajusta_o_fim_do_mes():
+    assert financeiro_service._um_mes_antes(date(2030, 3, 31)) == date(2030, 2, 28)
+    assert financeiro_service._um_mes_antes(date(2030, 1, 15)) == date(2029, 12, 15)
+
+
+def test_semanal_nao_tem_o_aviso_de_um_mes(client, professor, aluno_maior, sessao):
+    plano = _criar_plano(
+        client,
+        professor,
+        aluno_maior,
+        frequencia="semanal",
+        dia_vencimento=hoje().weekday(),
+    )
+    ultima = _cobrancas(sessao, plano["id"])[-1]
+    assert set(_avisos(sessao, ultima.id)) == {
+        TipoNotificacao.COBRANCA_VENCE_EM_1_SEMANA,
+        TipoNotificacao.COBRANCA_VENCE_HOJE,
+        TipoNotificacao.COBRANCA_VENCIDA,
+        TipoNotificacao.COBRANCA_VENCIDA_PROFESSOR,
+    }
+
+
+def _definir_chave_pix(sessao, professor, chave="professora@exemplo.com"):
+    sessao.get(Professor, professor.id).chave_pix = chave
+    sessao.commit()
+
+
+def test_avulsa_avisa_o_aluno_por_email_com_a_chave_pix(
+    client, professor, aluno_maior, sessao, enviador
+):
+    _definir_chave_pix(sessao, professor)
+    _avulsa(client, professor, aluno_maior, valor_centavos=12345)
+    (email,) = enviador.mensagens
+    assert email["para"] == aluno_maior.email
+    assert email["assunto"] == "Novo pagamento"
+    assert "R$ 123,45" in email["corpo"]
+    assert "Pague pelo Pix: professora@exemplo.com" in email["corpo"]
+
+
+def test_editar_cobranca_avisa_o_aluno(client, professor, aluno_maior, enviador):
+    cobranca = _avulsa(client, professor, aluno_maior)
+    client.patch(
+        f"{ROTA}/cobrancas/{cobranca['id']}",
+        json={"valor_centavos": 6000},
+        headers=cabecalho(professor),
+    )
+    assert [email["assunto"] for email in enviador.mensagens] == [
+        "Novo pagamento",
+        "Pagamento alterado",
+    ]
+    # Sem chave Pix cadastrada, o e-mail orienta a combinar com a professora.
+    assert "Combine o pagamento com" in enviador.mensagens[-1]["corpo"]
+
+
+def test_plano_avisa_uma_vez_e_nao_por_cobranca(
+    client, professor, aluno_maior, enviador
+):
+    plano = _criar_plano(
+        client,
+        professor,
+        aluno_maior,
+        frequencia="semanal",
+        dia_vencimento=2,
+        valor_centavos=8000,
+    )
+    (email,) = enviador.mensagens
+    assert email["assunto"] == "Novo plano de pagamento"
+    assert "R$ 80,00 toda quarta" in email["corpo"]
+
+    client.patch(
+        f"{ROTA}/planos/{plano['id']}",
+        json={"valor_centavos": 9000},
+        headers=cabecalho(professor),
+    )
+    assert [email["assunto"] for email in enviador.mensagens] == [
+        "Novo plano de pagamento",
+        "Plano de pagamento alterado",
+    ]
+
+
+def test_atraso_avisa_a_professora_por_email(client, professor, aluno_maior, sessao):
+    cobranca = _avulsa(
+        client, professor, aluno_maior, vencimento=hoje() - timedelta(days=1)
+    )
+    conteudo = financeiro_service.RESOLVEDORES[
+        TipoNotificacao.COBRANCA_VENCIDA_PROFESSOR
+    ](sessao, cobranca["id"])
+    assert conteudo.email is True
+    assert list(conteudo.usuario_ids) == [professor.id]
+
+
+def test_plano_encerrado_nao_avisa(client, professor, aluno_maior, sessao):
+    plano = _criar_plano(client, professor, aluno_maior)
+    client.delete(f"{ROTA}/planos/{plano['id']}", headers=cabecalho(professor))
+    sessao.expire_all()
+    for tipo in financeiro_service.TIPOS_DO_PLANO:
+        assert financeiro_service.RESOLVEDORES[tipo](sessao, plano["id"]) is None

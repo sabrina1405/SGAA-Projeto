@@ -8,6 +8,8 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    UniqueConstraint,
+    func,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -32,7 +34,13 @@ class TipoNotificacao(enum.StrEnum):
     ATIVIDADE_LEMBRETE_SEMANA = "atividade_lembrete_semana"
     ATIVIDADE_LEMBRETE_DIA = "atividade_lembrete_dia"
     ATIVIDADE_VENCE_HOJE = "atividade_vence_hoje"
-    COBRANCA_VENCE_EM_BREVE = "cobranca_vence_em_breve"
+    # Saem na hora em que a professora lança ou altera.
+    COBRANCA_CRIADA = "cobranca_criada"
+    COBRANCA_EDITADA = "cobranca_editada"
+    PLANO_CRIADO = "plano_criado"
+    PLANO_EDITADO = "plano_editado"
+    COBRANCA_VENCE_EM_1_MES = "cobranca_vence_em_1_mes"
+    COBRANCA_VENCE_EM_1_SEMANA = "cobranca_vence_em_1_semana"
     COBRANCA_VENCE_HOJE = "cobranca_vence_hoje"
     COBRANCA_VENCIDA = "cobranca_vencida"
     # A mesma cobrança vencida, avisada à professora.
@@ -102,3 +110,26 @@ class EnvioPush(AuditoriaMixin, Base):
     status: Mapped[str] = mapped_column(String(20))
     erro: Mapped[str | None] = mapped_column(String(100))
     verificado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EnvioEmail(Base):
+    """Um e-mail enviado a um usuário por uma notificação. Numa nova tentativa,
+    quem já recebeu não recebe de novo."""
+
+    __tablename__ = "envio_email"
+    __table_args__ = (
+        UniqueConstraint(
+            "notificacao_id", "usuario_id", name="uq_envio_email_notificacao_usuario"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    notificacao_id: Mapped[int] = mapped_column(
+        ForeignKey("notificacao.id", ondelete="CASCADE")
+    )
+    usuario_id: Mapped[int] = mapped_column(
+        ForeignKey("usuario.id", ondelete="CASCADE"), index=True
+    )
+    criado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

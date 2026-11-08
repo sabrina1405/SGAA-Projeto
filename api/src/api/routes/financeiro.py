@@ -1,9 +1,17 @@
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Path, Query, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Path,
+    Query,
+    status,
+)
 
-from src.api.deps import ProfessorAtual, SessaoDep
+from src.api.deps import EnviadorEmailDep, EnviadorPushDep, ProfessorAtual, SessaoDep
 from src.core.errors import CamposInvalidos
 from src.schemas.aluno import hoje
 from src.schemas.financeiro import (
@@ -25,7 +33,7 @@ from src.schemas.paginacao import (
 )
 from src.schemas.resposta import Resposta
 from src.schemas.tipos import ID_MAXIMO
-from src.services import financeiro_service, usuario_service
+from src.services import financeiro_service, notificacao_service, usuario_service
 
 router = APIRouter(prefix="/financeiro", tags=["Financeiro"])
 
@@ -42,6 +50,34 @@ def _aluno_invalido(erro: usuario_service.AlunosInvalidos) -> CamposInvalidos:
     )
 
 
+class Avisos:
+    """Envia na hora o aviso de criação ou edição, por push e e-mail."""
+
+    def __init__(
+        self,
+        tarefas: BackgroundTasks,
+        sessao: SessaoDep,
+        enviador_push: EnviadorPushDep,
+        enviador_email: EnviadorEmailDep,
+    ) -> None:
+        self.tarefas = tarefas
+        self.sessao = sessao
+        self.enviador_push = enviador_push
+        self.enviador_email = enviador_email
+
+    def enviar(self, notificacao_id: int) -> None:
+        self.tarefas.add_task(
+            notificacao_service.enviar_sem_falhar,
+            self.sessao,
+            self.enviador_push,
+            notificacao_id,
+            self.enviador_email,
+        )
+
+
+AvisosDep = Annotated[Avisos, Depends()]
+
+
 def _nao_encontrado(detalhe: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detalhe)
 
@@ -55,10 +91,11 @@ def _transicao_invalida(detalhe: str) -> HTTPException:
 
 @router.post("/planos", status_code=status.HTTP_201_CREATED)
 def criar_plano(
-    dados: PlanoCriar, professor: ProfessorAtual, sessao: SessaoDep
+    dados: PlanoCriar, professor: ProfessorAtual, sessao: SessaoDep, avisos: AvisosDep
 ) -> Resposta[PlanoResposta]:
     """Cobrança recorrente de um aluno. As cobranças que vencem nos próximos
-    10 dias já são geradas; as seguintes saem pela tarefa agendada."""
+    35 dias já são geradas; as seguintes saem pela tarefa agendada. O aluno é
+    avisado na hora, pelo app e por e-mail."""
     if dados.inicio < hoje():
         raise CamposInvalidos(
             "inicio_no_passado",
@@ -66,9 +103,12 @@ def criar_plano(
             ["inicio"],
         )
     try:
-        plano = financeiro_service.criar_plano(sessao, professor, **dados.model_dump())
+        plano, aviso_id = financeiro_service.criar_plano(
+            sessao, professor, **dados.model_dump()
+        )
     except usuario_service.AlunosInvalidos as erro:
         raise _aluno_invalido(erro) from None
+    avisos.enviar(aviso_id)
     return Resposta(
         mensagem="Plano criado",
         dados=PlanoResposta.model_validate(
@@ -119,17 +159,19 @@ def atualizar_plano(
     dados: PlanoAtualizar,
     professor: ProfessorAtual,
     sessao: SessaoDep,
+    avisos: AvisosDep,
 ) -> Resposta[PlanoResposta]:
     """Altera só os campos enviados. As cobranças ainda não vencidas seguem a
-    mudança; as vencidas e as pagas ficam como estão."""
+    mudança; as vencidas e as pagas ficam como estão. O aluno é avisado."""
     try:
-        plano = financeiro_service.atualizar_plano(
+        plano, aviso_id = financeiro_service.atualizar_plano(
             sessao, professor, plano_id, dados.model_dump(exclude_unset=True)
         )
     except financeiro_service.PlanoNaoEncontrado:
         raise _nao_encontrado("Plano não encontrado") from None
     except ValueError as erro:
         raise CamposInvalidos("plano_invalido", str(erro), ["body"]) from None
+    avisos.enviar(aviso_id)
     return Resposta(
         mensagem="Plano atualizado",
         dados=PlanoResposta.model_validate(
@@ -164,15 +206,19 @@ def _resposta_cobranca(sessao, cobranca, mensagem: str) -> Resposta[CobrancaResp
 
 @router.post("/cobrancas", status_code=status.HTTP_201_CREATED)
 def criar_cobranca(
-    dados: CobrancaCriar, professor: ProfessorAtual, sessao: SessaoDep
+    dados: CobrancaCriar,
+    professor: ProfessorAtual,
+    sessao: SessaoDep,
+    avisos: AvisosDep,
 ) -> Resposta[CobrancaResposta]:
-    """Cobrança avulsa."""
+    """Cobrança avulsa. O aluno é avisado na hora, pelo app e por e-mail."""
     try:
-        cobranca = financeiro_service.criar_cobranca(
+        cobranca, aviso_id = financeiro_service.criar_cobranca(
             sessao, professor, **dados.model_dump()
         )
     except usuario_service.AlunosInvalidos as erro:
         raise _aluno_invalido(erro) from None
+    avisos.enviar(aviso_id)
     return _resposta_cobranca(sessao, cobranca, "Cobrança criada")
 
 
@@ -224,10 +270,11 @@ def atualizar_cobranca(
     dados: CobrancaAtualizar,
     professor: ProfessorAtual,
     sessao: SessaoDep,
+    avisos: AvisosDep,
 ) -> Resposta[CobrancaResposta]:
-    """Só para cobranças pendentes, inclusive as vencidas."""
+    """Só para cobranças pendentes, inclusive as vencidas. O aluno é avisado."""
     try:
-        cobranca = financeiro_service.atualizar_cobranca(
+        cobranca, aviso_id = financeiro_service.atualizar_cobranca(
             sessao, professor, cobranca_id, dados.model_dump(exclude_unset=True)
         )
     except financeiro_service.CobrancaNaoEncontrada:
@@ -238,6 +285,7 @@ def atualizar_cobranca(
         raise _transicao_invalida(
             "O plano já tem uma cobrança com esse vencimento"
         ) from None
+    avisos.enviar(aviso_id)
     return _resposta_cobranca(sessao, cobranca, "Cobrança atualizada")
 
 
