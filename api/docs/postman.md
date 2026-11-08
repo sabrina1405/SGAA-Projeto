@@ -872,6 +872,389 @@ Use `{{token_aluno}}`. Com o token da professora, a resposta é `403`.
 
 ---
 
+## Pastas (professor)
+
+Use `{{token_professor}}`. Sem token → `401`; com token de aluno → `403`. Pasta de outro professor → `404`.
+
+As pastas podem ter subpastas. Os destinatários ficam na pasta raiz e valem para todas as subpastas. Para guardar uma apostila, envie o arquivo pelas rotas de [Arquivos](#arquivos) e depois adicione-o à pasta.
+
+### POST `{{base_url}}/pastas`
+
+**Caminho feliz (raiz)** → `201`
+
+```json
+{
+  "nome": "Apostilas",
+  "grupo_ids": [1],
+  "aluno_ids": [3]
+}
+```
+
+**Caminho feliz (subpasta)** → `201`
+
+```json
+{
+  "nome": "Módulo 1",
+  "pasta_pai_id": 1
+}
+```
+
+**Erro: destinatários em uma subpasta** → `422`
+
+```json
+{
+  "nome": "Módulo 2",
+  "pasta_pai_id": 1,
+  "todos_alunos": true
+}
+```
+
+**Erro: todos os alunos e alunos avulsos** → `422`
+
+```json
+{
+  "nome": "Listas",
+  "todos_alunos": true,
+  "aluno_ids": [3]
+}
+```
+
+- Erro: nome repetido no mesmo lugar, sem diferenciar maiúsculas → `409`.
+- Erro: `pasta_pai_id` de outro professor → `422`.
+- Erro: grupo de outro professor → `422`.
+- Erro: passar de 20 níveis → `422`.
+
+### GET `{{base_url}}/pastas?pagina=1&tamanho=20`
+
+**Caminho feliz** → `200`. Lista as pastas raiz. Com `pasta_pai_id`, lista as subpastas dela: `{{base_url}}/pastas?pasta_pai_id=1`.
+
+- Erro: `pasta_pai_id` de outro professor → `404`.
+
+### GET `{{base_url}}/pastas/{pasta_id}`
+
+**Caminho feliz** → `200`. Devolve as subpastas, os materiais, o caminho desde a raiz e os destinatários da raiz.
+
+- Erro: pasta de outro professor ou excluída → `404`.
+
+### PATCH `{{base_url}}/pastas/{pasta_id}`
+
+**Caminho feliz: renomear** → `200`
+
+```json
+{
+  "nome": "Listas de exercícios"
+}
+```
+
+**Caminho feliz: mover para dentro de outra pasta** → `200`. Uma raiz que vira subpasta passa a seguir os destinatários da nova raiz.
+
+```json
+{
+  "pasta_pai_id": 5
+}
+```
+
+**Caminho feliz: levar para a raiz** → `200`. Começa sem destinatários.
+
+```json
+{
+  "pasta_pai_id": null
+}
+```
+
+**Erro: mover para dentro dela mesma ou de uma subpasta dela** → `422`
+
+```json
+{
+  "pasta_pai_id": 2
+}
+```
+
+**Erro: corpo vazio** → `422`
+
+```json
+{}
+```
+
+- Erro: nome repetido no destino → `409`.
+- Erro: destinatários em uma subpasta → `422`.
+
+### DELETE `{{base_url}}/pastas/{pasta_id}`
+
+**Caminho feliz** → `200`. Exclui também as subpastas, e os materiais delas são apagados do Drive pela tarefa agendada.
+
+### POST `{{base_url}}/pastas/{pasta_id}/arquivos`
+
+**Caminho feliz** → `200`. Até 20 arquivos por chamada.
+
+```json
+{
+  "arquivo_ids": [10, 11]
+}
+```
+
+**Erro: arquivo de outro usuário, não confirmado ou já guardado em outro lugar** → `422`
+
+```json
+{
+  "arquivo_ids": [99]
+}
+```
+
+**Erro: lista vazia** → `422`
+
+```json
+{
+  "arquivo_ids": []
+}
+```
+
+### PATCH `{{base_url}}/pastas/{pasta_id}/arquivos/{arquivo_id}`
+
+**Caminho feliz** → `200`. Devolve a pasta de destino.
+
+```json
+{
+  "pasta_id": 5
+}
+```
+
+- Erro: material que não está nesta pasta → `404`.
+- Erro: pasta de destino de outro professor → `422`.
+
+### DELETE `{{base_url}}/pastas/{pasta_id}/arquivos/{arquivo_id}`
+
+**Caminho feliz** → `200`. O material é apagado do Drive pela tarefa agendada.
+
+- Erro: material que não está nesta pasta → `404`.
+
+---
+
+## Materiais (aluno)
+
+Use `{{token_aluno}}`. Sem token → `401`; com token de professor → `403`.
+
+### GET `{{base_url}}/meus-materiais?pagina=1&tamanho=20`
+
+**Caminho feliz** → `200`. Pastas raiz liberadas ao aluno: para todos os alunos, para os grupos dele, para todos os grupos da professora ou para ele diretamente.
+
+### GET `{{base_url}}/meus-materiais/{pasta_id}`
+
+**Caminho feliz** → `200`. Subpastas e materiais (com a `url` do Drive) de uma pasta liberada.
+
+- Erro: pasta não liberada ao aluno, inclusive depois de ele sair do grupo → `404`.
+
+---
+
+## Financeiro (professor)
+
+Use `{{token_professor}}`. Sem token → `401`; com token de aluno → `403`. Plano ou cobrança de outro professor → `404`.
+
+O aluno paga por Pix, fora do app, e a professora dá a baixa. Valores em centavos: `25000` é R$ 250,00. Criar ou editar uma cobrança ou um plano avisa o aluno na hora, pelo app e por e-mail; com `EMAIL_BACKEND=console`, o e-mail aparece no log do servidor.
+
+### POST `{{base_url}}/financeiro/planos`
+
+**Caminho feliz (mensal)** → `201`. Já gera as cobranças que vencem nos próximos 35 dias.
+
+```json
+{
+  "aluno_id": 3,
+  "descricao": "Mensalidade",
+  "valor_centavos": 25000,
+  "frequencia": "mensal",
+  "dia_vencimento": 10
+}
+```
+
+**Caminho feliz (semanal, toda quarta)** → `201`
+
+```json
+{
+  "aluno_id": 3,
+  "descricao": "Aula semanal",
+  "valor_centavos": 8000,
+  "frequencia": "semanal",
+  "dia_vencimento": 2
+}
+```
+
+**Erro: dia fora do intervalo da frequência** → `422`
+
+```json
+{
+  "aluno_id": 3,
+  "descricao": "Aula semanal",
+  "valor_centavos": 8000,
+  "frequencia": "semanal",
+  "dia_vencimento": 7
+}
+```
+
+**Erro: início no passado** → `422`
+
+```json
+{
+  "aluno_id": 3,
+  "descricao": "Mensalidade",
+  "valor_centavos": 25000,
+  "frequencia": "mensal",
+  "dia_vencimento": 10,
+  "inicio": "2020-01-01"
+}
+```
+
+**Erro: valor zerado** → `422`
+
+```json
+{
+  "aluno_id": 3,
+  "descricao": "Mensalidade",
+  "valor_centavos": 0,
+  "frequencia": "mensal",
+  "dia_vencimento": 10
+}
+```
+
+- Erro: aluno que não existe ou não concluiu o primeiro acesso → `422`.
+
+### GET `{{base_url}}/financeiro/planos?aluno_id=3&pagina=1&tamanho=20`
+
+**Caminho feliz** → `200`. Planos ativos, pelo nome do aluno. Sem `aluno_id`, lista todos.
+
+### GET `{{base_url}}/financeiro/planos/{plano_id}`
+
+**Caminho feliz** → `200`
+
+- Erro: plano de outro professor ou encerrado → `404`.
+
+### PATCH `{{base_url}}/financeiro/planos/{plano_id}`
+
+**Caminho feliz** → `200`. Vale para as cobranças ainda não vencidas.
+
+```json
+{
+  "valor_centavos": 27000
+}
+```
+
+**Erro: dia fora do intervalo** → `422`
+
+```json
+{
+  "dia_vencimento": 32
+}
+```
+
+**Erro: corpo vazio** → `422`
+
+```json
+{}
+```
+
+### DELETE `{{base_url}}/financeiro/planos/{plano_id}`
+
+**Caminho feliz** → `200`. Cancela as cobranças ainda não vencidas.
+
+### POST `{{base_url}}/financeiro/cobrancas`
+
+**Caminho feliz (avulsa)** → `201`
+
+```json
+{
+  "aluno_id": 3,
+  "descricao": "Material didático",
+  "valor_centavos": 5000,
+  "vencimento": "2026-11-20"
+}
+```
+
+**Erro: sem o vencimento** → `422`
+
+```json
+{
+  "aluno_id": 3,
+  "descricao": "Material didático",
+  "valor_centavos": 5000
+}
+```
+
+- Erro: aluno inválido → `422`.
+
+### GET `{{base_url}}/financeiro/cobrancas?situacao=vencida&pagina=1&tamanho=20`
+
+**Caminho feliz** → `200`. Outros filtros: `aluno_id`, `de` e `ate` (datas `AAAA-MM-DD`). `situacao` aceita `pendente`, `vencida`, `paga` ou `cancelada`.
+
+- Erro: `situacao` desconhecida → `422`.
+
+### GET `{{base_url}}/financeiro/cobrancas/{cobranca_id}`
+
+**Caminho feliz** → `200`
+
+- Erro: cobrança de outro professor → `404`.
+
+### PATCH `{{base_url}}/financeiro/cobrancas/{cobranca_id}`
+
+**Caminho feliz** → `200`. Só para pendentes, inclusive as vencidas.
+
+```json
+{
+  "vencimento": "2026-11-25"
+}
+```
+
+- Erro: cobrança paga ou cancelada → `409`.
+- Erro: vencimento de outra cobrança do mesmo plano → `409`.
+
+### POST `{{base_url}}/financeiro/cobrancas/{cobranca_id}/pagar`
+
+**Caminho feliz** → `200`. Sem corpo, vale o momento da baixa; com corpo, a data informada.
+
+```json
+{
+  "paga_em": "2026-11-05T10:00:00-03:00"
+}
+```
+
+- Erro: cobrança já paga ou cancelada → `409`.
+
+### POST `{{base_url}}/financeiro/cobrancas/{cobranca_id}/reabrir`
+
+**Caminho feliz** → `200`. Desfaz a baixa.
+
+- Erro: cobrança que não está paga → `409`.
+
+### POST `{{base_url}}/financeiro/cobrancas/{cobranca_id}/cancelar`
+
+**Caminho feliz** → `200`
+
+- Erro: cobrança paga ou já cancelada → `409`.
+
+### GET `{{base_url}}/financeiro/resumo?mes=2026-11`
+
+**Caminho feliz** → `200`. Sem `mes`, usa o mês atual.
+
+- Erro: mês inválido, como `2026-13` ou `0000-05` → `422`.
+
+---
+
+## Minhas cobranças (aluno)
+
+Use `{{token_aluno}}`. Sem token → `401`; com token de professor → `403`.
+
+### GET `{{base_url}}/minhas-cobrancas?situacao=pendente&pagina=1&tamanho=20`
+
+**Caminho feliz** → `200`. Cada cobrança traz `professor_nome` e `chave_pix` para o pagamento.
+
+- Erro: `situacao` desconhecida → `422`.
+
+### GET `{{base_url}}/minhas-cobrancas/{cobranca_id}`
+
+**Caminho feliz** → `200`
+
+- Erro: cobrança de outro aluno → `404`.
+
+---
+
 ## Dispositivos (push)
 
 Vale para os dois tipos de usuário: use `{{token_aluno}}` ou `{{token_professor}}`. Sem token → `401`.

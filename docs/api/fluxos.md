@@ -150,7 +150,7 @@ Só atende contas que já concluíram o primeiro acesso.
 - **Quem aparece na lista**: só alunos que concluíram o primeiro acesso. Um aluno cadastrado que ainda não ativou a conta não é listado; o detalhe dele responde pelo `id` devolvido no cadastro, com `perfil` nulo e `primeiro_acesso_concluido` falso.
 - **Telefone da lista**: o do aluno ou, quando ele tem responsável, o do responsável.
 - **Busca**: o parâmetro `busca` (até 100 caracteres) procura um trecho no nome ou no e-mail, sem diferenciar maiúsculas nem acentos: `joao` encontra `João`.
-- **Detalhe**: `aulas` e `pagamentos` estão reservados e vêm sempre como listas vazias. Um `id` de professor responde `404`.
+- **Detalhe**: `aulas` está reservado e vem sempre como lista vazia. `pagamentos` traz as cobranças do aluno com a professora que consulta, no formato da lista de cobranças do financeiro, do vencimento mais novo ao mais antigo. Um `id` de professor responde `404`.
 
 ### Perfil do aluno
 
@@ -284,11 +284,11 @@ Campos que o aluno pode editar:
 | `POST /v1/arquivos/{id}/confirmar` | Confere o arquivo no Drive e cria o link. |
 | `DELETE /v1/arquivos/{id}` | Descarta um arquivo ainda não salvo. |
 
-- **Fluxo**: o arquivo sobe **antes** de salvar o formulário, em três passos: abrir a sessão, mandar o conteúdo com `PUT` direto à `url_upload` (a resposta do Google traz o `id`, sem passar pela API) e confirmar com esse valor em `drive_file_id`. Depois, a atividade ou a entrega recebe os ids em `arquivo_ids`. Detalhes em [Google Drive](../../api/docs/google_drive.md).
+- **Fluxo**: o arquivo sobe **antes** de salvar o formulário, em três passos: abrir a sessão, mandar o conteúdo com `PUT` direto à `url_upload` (a resposta do Google traz o `id`, sem passar pela API) e confirmar com esse valor em `drive_file_id`. Depois, a atividade, a entrega ou a pasta de materiais recebe os ids em `arquivo_ids`. Detalhes em [Google Drive](../../api/docs/google_drive.md).
 - **Limites**: até 5 MB (`tamanho` em bytes), e até 10 arquivos enviados e não salvos por usuário (`409`; uma sessão descartada antes do envio continua contando por até 7 dias, enquanto a URL de envio do Drive ainda aceita o conteúdo). Tipos aceitos: PDF, PNG, JPEG, WebP, texto puro, Word, Excel e PowerPoint. Fora disso, `422` com `tipo` igual a `arquivo_muito_grande` ou `tipo_nao_permitido`.
 - **Confirmação**: vale o que está no Drive, e não o declarado. Arquivo fora dos limites responde `422` e é apagado. Arquivo que não existe ou é de outra sessão responde `422` com `tipo` igual a `arquivo_nao_enviado`. Repetir a confirmação é seguro: use em caso de `503` ou timeout.
 - **Dono**: cada usuário vê e altera só os próprios arquivos. Os de outro usuário respondem `404`.
-- **Link**: `url` abre o arquivo para quem tem o link, sem login. A API só o entrega a quem tem acesso à atividade.
+- **Link**: `url` abre o arquivo para quem tem o link, sem login. A API só o entrega a quem tem acesso à atividade ou à pasta.
 - **Descartar**: arquivo já salvo responde `409`; ele sai pela edição ou exclusão da atividade ou entrega.
 - **Sem vínculo**: arquivo pendente há mais de 1 hora, ou confirmado e não salvo há mais de 24 horas, é apagado.
 - **Drive indisponível**: `503`, sem gravar nada.
@@ -328,6 +328,74 @@ Campos que o aluno pode editar:
 - **Edição**: até o vencimento. `arquivo_ids` enviado substitui os arquivos; ausente, mantém. Depois do vencimento, `409`.
 - **Atraso**: vencida, a atividade ainda aceita a primeira entrega, com `status` igual a `entregue_com_atraso`. Por isso, envie os arquivos antes e mande tudo na mesma chamada.
 
+### Pastas (professor)
+
+| Rota | Resultado |
+| --- | --- |
+| `POST /v1/pastas` | Cria uma pasta. Sem `pasta_pai_id`, é raiz. |
+| `GET /v1/pastas` | Pastas raiz; com `?pasta_pai_id=`, as subpastas. Ordem alfabética, paginado. |
+| `GET /v1/pastas/{id}` | Subpastas, materiais, caminho desde a raiz e destinatários. |
+| `PATCH /v1/pastas/{id}` | Renomeia, troca os destinatários ou move a pasta. |
+| `DELETE /v1/pastas/{id}` | Exclui a pasta, as subpastas e os materiais delas. |
+| `POST /v1/pastas/{id}/arquivos` | Guarda arquivos já confirmados (até 20 por chamada). |
+| `PATCH /v1/pastas/{id}/arquivos/{arquivo_id}` | Move o material para outra pasta (`pasta_id`). |
+| `DELETE /v1/pastas/{id}/arquivos/{arquivo_id}` | Tira o material da pasta e o apaga do Drive. |
+
+- **Árvore**: subpastas em qualquer nível, até 20 níveis. Nome único no mesmo lugar, sem diferenciar maiúsculas (`409`).
+- **Destinatários**: definidos só na pasta raiz (`todos_alunos`, `todos_grupos`, `grupo_ids`, `aluno_ids`) e valem para todas as subpastas. Em subpasta, `422` com `tipo` igual a `destinatarios_so_na_raiz`. Sem destinatário, a pasta fica só com a professora.
+- **Mover**: `pasta_pai_id` leva a pasta, com tudo dentro, para outro lugar; nulo a leva para a raiz. Para dentro dela mesma, `422` com `tipo` igual a `ciclo`. Uma raiz que vira subpasta passa a seguir os destinatários da nova raiz; uma subpasta que vira raiz começa sem destinatários.
+- **Materiais**: o arquivo sobe pelas rotas de Arquivos e entra na pasta com `arquivo_ids`. Cada arquivo fica em um lugar só; o que já está em uma atividade, entrega ou pasta responde `422`.
+- **Dono**: pasta de outro professor responde `404`; usada como `pasta_pai_id` ou `pasta_id`, `422`.
+
+### Materiais (aluno)
+
+| Rota | Resultado |
+| --- | --- |
+| `GET /v1/meus-materiais` | Pastas raiz liberadas ao aluno, com o nome da professora. |
+| `GET /v1/meus-materiais/{id}` | Subpastas e materiais (com a `url`) de uma pasta liberada. |
+
+- **Quem vê**: a pasta raiz liberada para todos os alunos, para todos os grupos da professora, para um grupo do aluno ou para o aluno diretamente. As subpastas seguem a raiz.
+- **Sair do grupo**: o acesso acaba na hora. Pasta não liberada ou excluída responde `404`.
+
+### Financeiro (professor)
+
+| Rota | Resultado |
+| --- | --- |
+| `POST /v1/financeiro/planos` | Cria a cobrança recorrente (mensal ou semanal) de um aluno. |
+| `GET /v1/financeiro/planos` | Planos ativos, pelo nome do aluno; `?aluno_id=` filtra. Paginado. |
+| `GET /v1/financeiro/planos/{id}` | Detalhe do plano. |
+| `PATCH /v1/financeiro/planos/{id}` | Altera descrição, valor, dia ou fim. |
+| `DELETE /v1/financeiro/planos/{id}` | Encerra o plano. |
+| `POST /v1/financeiro/cobrancas` | Cria uma cobrança avulsa. |
+| `GET /v1/financeiro/cobrancas` | Por vencimento, da mais antiga à mais nova. Filtros: `aluno_id`, `situacao`, `de`, `ate`. Paginado. |
+| `GET /v1/financeiro/cobrancas/{id}` | Detalhe da cobrança. |
+| `PATCH /v1/financeiro/cobrancas/{id}` | Altera descrição, valor ou vencimento de uma pendente. |
+| `POST /v1/financeiro/cobrancas/{id}/pagar` | Dá baixa. Corpo opcional com `paga_em`. |
+| `POST /v1/financeiro/cobrancas/{id}/reabrir` | Desfaz a baixa. |
+| `POST /v1/financeiro/cobrancas/{id}/cancelar` | Cancela uma pendente. |
+| `GET /v1/financeiro/resumo` | Totais do mês (`?mes=AAAA-MM`, padrão: o atual). |
+
+- **Pagamento**: por Pix, fora do app, na chave Pix da professora. A baixa é manual: a professora confere o recebimento e chama `/pagar`.
+- **Valores**: sempre em centavos (`valor_centavos`), de 1 a 10000000 (R$ 100 mil).
+- **Situação**: `pendente`, `vencida`, `paga` ou `cancelada`. `vencida` é calculada: uma pendente com o vencimento antes de hoje (horário de Brasília).
+- **Plano**: `frequencia` `mensal`, com `dia_vencimento` de 1 a 31 (no mês mais curto, vale o último dia), ou `semanal`, com `dia_vencimento` de 0 (segunda) a 6 (domingo). `inicio` é hoje ou depois (`422` com `tipo` igual a `inicio_no_passado`); cobranças anteriores entram como avulsas. Sem `fim`, vale até ser encerrado.
+- **Geração**: as cobranças de cada plano são criadas com 35 dias de antecedência (o suficiente para o aviso de 1 mês), ao criar o plano e pela tarefa agendada. Cada uma guarda descrição e valor do momento em que foi gerada.
+- **Editar o plano**: vale para as cobranças ainda não vencidas; as vencidas e as pagas ficam como estão. Mudar o dia ou o fim refaz as datas futuras, a partir do mês (ou da semana) seguinte à última cobrança que ficou, e nunca antes de hoje: cada período tem uma cobrança só, e nenhuma nasce vencida.
+- **Encerrar o plano**: as cobranças ainda não vencidas são canceladas; as vencidas continuam devidas.
+- **Baixa**: só uma pendente (inclusive vencida) pode ser paga, editada ou cancelada, e só uma paga pode ser reaberta. Fora disso, `409`. Mover uma cobrança de plano para o vencimento de outra do mesmo plano também responde `409`.
+- **Dono**: plano ou cobrança de outro professor responde `404`. Aluno que não existe ou não concluiu o primeiro acesso responde `422` com `tipo` igual a `aluno_invalido`.
+- **Resumo**: pelo vencimento dentro do mês, sem as canceladas: `recebido_centavos` (pagas), `pendente_centavos` (a vencer) e `vencido_centavos` (pendentes atrasadas).
+
+### Minhas cobranças (aluno)
+
+| Rota | Resultado |
+| --- | --- |
+| `GET /v1/minhas-cobrancas` | Cobranças de todas as professoras, da mais recente à mais antiga. `?situacao=` filtra. Paginado. |
+| `GET /v1/minhas-cobrancas/{id}` | Detalhe da cobrança. |
+
+- **Como pagar**: cada cobrança traz `professor_nome` e `chave_pix` de quem cobra. `chave_pix` vem nula se a professora ainda não cadastrou a dela.
+- **Dono**: cobrança de outro aluno responde `404`.
+
 ### Notificações push
 
 | Rota | Resultado |
@@ -347,11 +415,18 @@ Campos que o aluno pode editar:
 - **Atividade nova**: os destinatários recebem o push na liberação: na hora, se `liberar_em` já passou. Adiar a liberação antes do envio muda o horário. Uma atividade já avisada não avisa de novo como nova.
 - **Atividade alterada**: se já foi liberada e mudaram título, descrição, datas ou anexos. Mudar só os destinatários ou `permite_envio_arquivo` não avisa.
 - **Lembretes de atividade**: 1 semana e 1 dia antes de `vence_em`, e às 7h (horário de Brasília) do dia do vencimento, só para quem ainda não entregou. Os que cairiam antes da liberação, no passado ou depois do vencimento não são agendados. Mudar `vence_em` refaz os lembretes, e excluir a atividade cancela os avisos.
+- **Cobranças**: todos os avisos vão **pelo app e por e-mail**. O e-mail usa o título como assunto e, para o aluno, inclui a chave Pix da professora (ou pede que ele combine o pagamento, se ela não tiver uma).
+  - **Na hora**, quando a professora age: "Novo pagamento" (cobrança avulsa), "Pagamento alterado" (cobrança editada), "Novo plano de pagamento" e "Plano de pagamento alterado". O plano avisa uma vez, com valor e frequência ("R$ 250,00 todo dia 10", "R$ 80,00 toda quarta"), e não uma vez por cobrança. As cobranças que a tarefa agendada gera sozinha não avisam na criação: contam com os lembretes.
+  - **Lembretes**, às 9h (horário de Brasília): "Pagamento vence em 1 mês" (mensal e avulsa; na mesma data do mês anterior, ou no último dia dele), "Pagamento vence em 1 semana" e "Pagamento vence hoje". O plano semanal não tem o de 1 mês.
+  - **Atraso**: no dia seguinte ao vencimento, às 9h, sem baixa, o aluno recebe "Pagamento em atraso" e a professora, "Pagamento em atraso: {aluno}".
+  - A baixa, o cancelamento ou o encerramento do plano cancelam os avisos; mudar o vencimento os refaz. Lembretes cujo horário já passou não são agendados, mas o de atraso sai mesmo para uma cobrança lançada já vencida. Numa nova tentativa da fila, quem já recebeu o e-mail não o recebe de novo.
 - **`dados`**: cada push leva um objeto para o app abrir a tela certa ao tocar na notificação.
   - Recado: `{"tipo": "recado", "recado_id": 41}`.
   - Aula: `{"tipo": "aula_lembrete_semana", "aula_id": 501}`, com `tipo` igual a `aula_lembrete_semana`, `aula_lembrete_dia`, `aula_lembrete_30min`, `aula_cancelada` ou `aulas_canceladas`.
   - Aluno cancelou: `{"tipo": "participacao_cancelada", "aula_id": 501, "aluno_id": 866}`.
   - Atividade: `{"tipo": "atividade_nova", "atividade_id": 397}`, com `tipo` igual a `atividade_nova`, `atividade_editada`, `atividade_lembrete_semana`, `atividade_lembrete_dia` ou `atividade_vence_hoje`.
+  - Cobrança: `{"tipo": "cobranca_vence_hoje", "cobranca_id": 73}`, com `tipo` igual a `cobranca_criada`, `cobranca_editada`, `cobranca_vence_em_1_mes`, `cobranca_vence_em_1_semana`, `cobranca_vence_hoje`, `cobranca_vencida` ou, para a professora, `cobranca_vencida_professor`.
+  - Plano: `{"tipo": "plano_criado", "plano_id": 12}`, com `tipo` igual a `plano_criado` ou `plano_editado`.
 
 ---
 

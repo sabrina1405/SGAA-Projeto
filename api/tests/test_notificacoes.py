@@ -852,3 +852,86 @@ def test_drive_fora_do_ar_nao_afeta_a_fila_na_tarefa(
     resultado = notificacao_service.executar_tarefa_agendada()
     assert resultado["enviadas"] == 1
     assert resultado["arquivos_removidos"] == 0
+
+
+def test_tarefa_agendada_gera_as_cobrancas_recorrentes(
+    client, professor, aluno_maior, drive, sessao, enviador_push, monkeypatch
+):
+    from src.models.financeiro import Cobranca, FrequenciaPlano, PlanoCobranca
+    from src.schemas.aluno import hoje
+
+    # Plano gravado direto, sem a geração imediata da rota.
+    plano = PlanoCobranca(
+        professor_id=professor.id,
+        aluno_id=aluno_maior.id,
+        descricao="Mensalidade",
+        valor_centavos=25000,
+        frequencia=FrequenciaPlano.SEMANAL,
+        dia_vencimento=hoje().weekday(),
+        inicio=hoje(),
+    )
+    sessao.add(plano)
+    sessao.commit()
+    monkeypatch.setattr(
+        notificacao_service, "obter_enviador_push", lambda: enviador_push
+    )
+    monkeypatch.setattr(notificacao_service, "obter_drive", lambda: drive)
+    monkeypatch.setattr(notificacao_service, "obter_engine", lambda: sessao.get_bind())
+    resultado = notificacao_service.executar_tarefa_agendada()
+    assert resultado["cobrancas_geradas"] == 6
+    assert (
+        sessao.scalar(
+            select(func.count())
+            .select_from(Cobranca)
+            .where(Cobranca.plano_id == plano.id)
+        )
+        == 6
+    )
+
+
+def test_email_sai_uma_vez_por_destinatario(
+    client, professor, aluno_maior, sessao, enviador, enviador_push
+):
+    from src.models.notificacao import Notificacao, TipoNotificacao
+    from tests.test_financeiro import _avulsa
+
+    cobranca = _avulsa(client, professor, aluno_maior)
+    assert len(enviador.mensagens) == 1
+    notificacao = sessao.scalar(
+        select(Notificacao).where(
+            Notificacao.tipo == TipoNotificacao.COBRANCA_CRIADA,
+            Notificacao.referencia_id == cobranca["id"],
+        )
+    )
+    # Uma nova tentativa da mesma notificação não repete o e-mail.
+    notificacao_service._enviar(sessao, enviador_push, notificacao, enviador)
+    assert len(enviador.mensagens) == 1
+
+
+def test_falha_no_email_volta_para_a_fila(
+    client, professor, aluno_maior, sessao, enviador
+):
+    from src.models.notificacao import Notificacao, TipoNotificacao
+    from tests.test_financeiro import _avulsa
+
+    enviador.falhar = True
+    cobranca = _avulsa(client, professor, aluno_maior)
+    sessao.expire_all()
+    notificacao = sessao.scalar(
+        select(Notificacao).where(
+            Notificacao.tipo == TipoNotificacao.COBRANCA_CRIADA,
+            Notificacao.referencia_id == cobranca["id"],
+        )
+    )
+    assert notificacao.processada_em is None
+    assert notificacao.tentativas == 1
+
+
+def test_recado_continua_so_no_app(client, professor, aluno_maior, enviador):
+    resposta = client.post(
+        "/v1/recados",
+        json={"conteudo": "Aviso geral", "todos_alunos": True},
+        headers=cabecalho(professor),
+    )
+    assert resposta.status_code == 201
+    assert enviador.mensagens == []
