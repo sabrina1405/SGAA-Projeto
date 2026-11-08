@@ -926,13 +926,15 @@ As pastas podem ter subpastas. Os destinatários ficam na pasta raiz e valem par
 
 ### GET `{{base_url}}/pastas?pagina=1&tamanho=20`
 
-Lista as pastas raiz. Com `pasta_pai_id`, lista as subpastas dela: `{{base_url}}/pastas?pasta_pai_id=1`.
+**Caminho feliz** → `200`. Lista as pastas raiz. Com `pasta_pai_id`, lista as subpastas dela: `{{base_url}}/pastas?pasta_pai_id=1`.
 
 - Erro: `pasta_pai_id` de outro professor → `404`.
 
 ### GET `{{base_url}}/pastas/{pasta_id}`
 
-Devolve as subpastas, os materiais, o caminho desde a raiz e os destinatários da raiz.
+**Caminho feliz** → `200`. Devolve as subpastas, os materiais, o caminho desde a raiz e os destinatários da raiz.
+
+- Erro: pasta de outro professor ou excluída → `404`.
 
 ### PATCH `{{base_url}}/pastas/{pasta_id}`
 
@@ -1034,11 +1036,11 @@ Use `{{token_aluno}}`. Sem token → `401`; com token de professor → `403`.
 
 ### GET `{{base_url}}/meus-materiais?pagina=1&tamanho=20`
 
-Pastas raiz liberadas ao aluno: para todos os alunos, para os grupos dele, para todos os grupos da professora ou para ele diretamente.
+**Caminho feliz** → `200`. Pastas raiz liberadas ao aluno: para todos os alunos, para os grupos dele, para todos os grupos da professora ou para ele diretamente.
 
 ### GET `{{base_url}}/meus-materiais/{pasta_id}`
 
-Subpastas e materiais (com a `url` do Drive) de uma pasta liberada.
+**Caminho feliz** → `200`. Subpastas e materiais (com a `url` do Drive) de uma pasta liberada.
 
 - Erro: pasta não liberada ao aluno, inclusive depois de ele sair do grupo → `404`.
 
@@ -1117,7 +1119,13 @@ O aluno paga por Pix, fora do app, e a professora dá a baixa. Valores em centav
 
 ### GET `{{base_url}}/financeiro/planos?aluno_id=3&pagina=1&tamanho=20`
 
+**Caminho feliz** → `200`. Planos ativos, pelo nome do aluno. Sem `aluno_id`, lista todos.
+
 ### GET `{{base_url}}/financeiro/planos/{plano_id}`
+
+**Caminho feliz** → `200`
+
+- Erro: plano de outro professor ou encerrado → `404`.
 
 ### PATCH `{{base_url}}/financeiro/planos/{plano_id}`
 
@@ -1174,11 +1182,15 @@ O aluno paga por Pix, fora do app, e a professora dá a baixa. Valores em centav
 
 ### GET `{{base_url}}/financeiro/cobrancas?situacao=vencida&pagina=1&tamanho=20`
 
-Outros filtros: `aluno_id`, `de` e `ate` (datas `AAAA-MM-DD`). `situacao` aceita `pendente`, `vencida`, `paga` ou `cancelada`.
+**Caminho feliz** → `200`. Outros filtros: `aluno_id`, `de` e `ate` (datas `AAAA-MM-DD`). `situacao` aceita `pendente`, `vencida`, `paga` ou `cancelada`.
 
 - Erro: `situacao` desconhecida → `422`.
 
 ### GET `{{base_url}}/financeiro/cobrancas/{cobranca_id}`
+
+**Caminho feliz** → `200`
+
+- Erro: cobrança de outro professor → `404`.
 
 ### PATCH `{{base_url}}/financeiro/cobrancas/{cobranca_id}`
 
@@ -1219,7 +1231,7 @@ Outros filtros: `aluno_id`, `de` e `ate` (datas `AAAA-MM-DD`). `situacao` aceita
 
 ### GET `{{base_url}}/financeiro/resumo?mes=2026-11`
 
-Sem `mes`, usa o mês atual.
+**Caminho feliz** → `200`. Sem `mes`, usa o mês atual.
 
 - Erro: mês inválido, como `2026-13` ou `0000-05` → `422`.
 
@@ -1231,11 +1243,13 @@ Use `{{token_aluno}}`. Sem token → `401`; com token de professor → `403`.
 
 ### GET `{{base_url}}/minhas-cobrancas?situacao=pendente&pagina=1&tamanho=20`
 
-Cada cobrança traz `professor_nome` e `chave_pix` para o pagamento.
+**Caminho feliz** → `200`. Cada cobrança traz `professor_nome` e `chave_pix` para o pagamento.
 
 - Erro: `situacao` desconhecida → `422`.
 
 ### GET `{{base_url}}/minhas-cobrancas/{cobranca_id}`
+
+**Caminho feliz** → `200`
 
 - Erro: cobrança de outro aluno → `404`.
 
