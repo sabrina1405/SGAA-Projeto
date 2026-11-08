@@ -10,7 +10,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-IMAGEM_SAM="public.ecr.aws/sam/build-python3.13:1.167.0-x86_64"
+IMAGEM_SAM="public.ecr.aws/sam/build-python3.13:1.167.0-x86_64@sha256:332de29fe82bd52b7418cb24a44ffd620bd12f18427b5f3ae48c1cdfba52070c"
 FONTE="build/lambda"
 
 ambiente="${1:-}"
@@ -57,7 +57,7 @@ cp -r src index.py lambda_handler.py lambda_tarefa.py "$FONTE"/
 rm -rf "$FONTE/src/scripts"
 find "$FONTE" -name __pycache__ -type d -prune -exec rm -rf {} +
 poetry export -f requirements.txt --output "$FONTE/requirements.txt" \
-    --without-hashes --only main
+    --only main
 
 tty_flag=()
 [ -t 0 ] && tty_flag=(-it)
