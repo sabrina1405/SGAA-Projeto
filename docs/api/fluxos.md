@@ -380,9 +380,9 @@ Campos que o aluno pode editar:
 - **Situação**: `pendente`, `vencida`, `paga` ou `cancelada`. `vencida` é calculada: uma pendente com o vencimento antes de hoje (horário de Brasília).
 - **Plano**: `frequencia` `mensal`, com `dia_vencimento` de 1 a 31 (no mês mais curto, vale o último dia), ou `semanal`, com `dia_vencimento` de 0 (segunda) a 6 (domingo). `inicio` é hoje ou depois (`422` com `tipo` igual a `inicio_no_passado`); cobranças anteriores entram como avulsas. Sem `fim`, vale até ser encerrado.
 - **Geração**: as cobranças de cada plano são criadas com 10 dias de antecedência, ao criar o plano e pela tarefa agendada. Cada uma guarda descrição e valor do momento em que foi gerada.
-- **Editar o plano**: vale para as cobranças ainda não vencidas; as vencidas e as pagas ficam como estão. Mudar o dia ou o fim refaz as datas futuras.
+- **Editar o plano**: vale para as cobranças ainda não vencidas; as vencidas e as pagas ficam como estão. Mudar o dia ou o fim refaz as datas futuras, a partir do mês (ou da semana) seguinte à última cobrança que ficou, e nunca antes de hoje: cada período tem uma cobrança só, e nenhuma nasce vencida.
 - **Encerrar o plano**: as cobranças ainda não vencidas são canceladas; as vencidas continuam devidas.
-- **Baixa**: só uma pendente (inclusive vencida) pode ser paga, editada ou cancelada, e só uma paga pode ser reaberta. Fora disso, `409`.
+- **Baixa**: só uma pendente (inclusive vencida) pode ser paga, editada ou cancelada, e só uma paga pode ser reaberta. Fora disso, `409`. Mover uma cobrança de plano para o vencimento de outra do mesmo plano também responde `409`.
 - **Dono**: plano ou cobrança de outro professor responde `404`. Aluno que não existe ou não concluiu o primeiro acesso responde `422` com `tipo` igual a `aluno_invalido`.
 - **Resumo**: pelo vencimento dentro do mês, sem as canceladas: `recebido_centavos` (pagas), `pendente_centavos` (a vencer) e `vencido_centavos` (pendentes atrasadas).
 

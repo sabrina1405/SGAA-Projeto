@@ -1191,6 +1191,7 @@ Outros filtros: `aluno_id`, `de` e `ate` (datas `AAAA-MM-DD`). `situacao` aceita
 ```
 
 - Erro: cobrança paga ou cancelada → `409`.
+- Erro: vencimento de outra cobrança do mesmo plano → `409`.
 
 ### POST `{{base_url}}/financeiro/cobrancas/{cobranca_id}/pagar`
 
@@ -1220,7 +1221,7 @@ Outros filtros: `aluno_id`, `de` e `ate` (datas `AAAA-MM-DD`). `situacao` aceita
 
 Sem `mes`, usa o mês atual.
 
-- Erro: mês inválido, como `2026-13` → `422`.
+- Erro: mês inválido, como `2026-13` ou `0000-05` → `422`.
 
 ---
 
