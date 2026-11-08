@@ -58,12 +58,18 @@ Resolvedor = Callable[[Session, int], Conteudo | None]
 
 def _resolvedores() -> dict[TipoNotificacao, Resolvedor]:
     # Import local: os services das features importam este módulo para agendar.
-    from src.services import atividade_service, aula_service, recado_service
+    from src.services import (
+        atividade_service,
+        aula_service,
+        financeiro_service,
+        recado_service,
+    )
 
     return {
         TipoNotificacao.RECADO: recado_service.conteudo_da_notificacao,
         **aula_service.RESOLVEDORES,
         **atividade_service.RESOLVEDORES,
+        **financeiro_service.RESOLVEDORES,
     }
 
 
@@ -304,11 +310,13 @@ def executar_tarefa_agendada() -> dict[str, int]:
     """Ponto de entrada do agendador (EventBridge) e do script local."""
     # Import local: `arquivo_service` não depende da fila, mas os services das
     # features importam este módulo.
-    from src.services import arquivo_service
+    from src.services import arquivo_service, financeiro_service
 
     enviador = obter_enviador_push()
     with Session(obter_engine(), expire_on_commit=False) as sessao:
         return {
+            # Antes do envio: os avisos das cobranças novas já entram na fila.
+            "cobrancas_geradas": financeiro_service.gerar_cobrancas_sem_falhar(sessao),
             "enviadas": processar_pendentes(sessao, enviador),
             "recibos_conferidos": conferir_recibos(sessao, enviador),
             # Por último: com o Drive fora do ar, só ela espera.

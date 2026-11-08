@@ -9,9 +9,11 @@ from src.api.routes import (
     aulas,
     auth,
     dispositivos,
+    financeiro,
     grupos,
     meus_materiais,
     minhas_atividades,
+    minhas_cobrancas,
     mural,
     pastas,
     recados,
@@ -50,6 +52,8 @@ v1.include_router(atividades.router)
 v1.include_router(minhas_atividades.router)
 v1.include_router(pastas.router)
 v1.include_router(meus_materiais.router)
+v1.include_router(financeiro.router)
+v1.include_router(minhas_cobrancas.router)
 v1.include_router(dispositivos.router)
 app.include_router(v1)
 

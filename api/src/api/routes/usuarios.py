@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, status
 
 from src.api.deps import EnviadorEmailDep, ProfessorAtual, SessaoDep
 from src.schemas.aluno import AlunoDetalheResposta, AlunoListaItem, PerfilAlunoDados
+from src.schemas.financeiro import CobrancaResposta
 from src.schemas.paginacao import (
     PAGINA_MAXIMA,
     TAMANHO_MAXIMO,
@@ -13,7 +14,7 @@ from src.schemas.paginacao import (
 from src.schemas.resposta import Resposta
 from src.schemas.tipos import ID_MAXIMO, Busca
 from src.schemas.usuario import AlunoCriar, UsuarioResposta
-from src.services import usuario_service
+from src.services import financeiro_service, usuario_service
 
 router = APIRouter(prefix="/usuarios", tags=["Usuários"])
 
@@ -67,10 +68,11 @@ def listar_alunos(
 @router.get("/alunos/{aluno_id}")
 def detalhar_aluno(
     aluno_id: Annotated[int, Path(ge=1, le=ID_MAXIMO)],
-    _: ProfessorAtual,
+    professor: ProfessorAtual,
     sessao: SessaoDep,
 ) -> Resposta[AlunoDetalheResposta]:
-    """`aulas` e `pagamentos` ainda vêm sempre vazios."""
+    """`aulas` ainda vem sempre vazio. `pagamentos` traz só as cobranças do
+    aluno com a professora que consulta."""
     try:
         usuario, aluno = usuario_service.obter_aluno(sessao, aluno_id)
     except usuario_service.AlunoNaoEncontrado:
@@ -85,5 +87,11 @@ def detalhar_aluno(
             email=usuario.email,
             primeiro_acesso_concluido=usuario.senha is not None,
             perfil=PerfilAlunoDados.model_validate(aluno) if aluno else None,
+            pagamentos=[
+                CobrancaResposta.model_validate(item).model_dump(mode="json")
+                for item in financeiro_service.cobrancas_do_aluno(
+                    sessao, professor, usuario.id
+                )
+            ],
         ),
     )

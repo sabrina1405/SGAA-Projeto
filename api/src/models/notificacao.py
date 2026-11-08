@@ -32,6 +32,11 @@ class TipoNotificacao(enum.StrEnum):
     ATIVIDADE_LEMBRETE_SEMANA = "atividade_lembrete_semana"
     ATIVIDADE_LEMBRETE_DIA = "atividade_lembrete_dia"
     ATIVIDADE_VENCE_HOJE = "atividade_vence_hoje"
+    COBRANCA_VENCE_EM_BREVE = "cobranca_vence_em_breve"
+    COBRANCA_VENCE_HOJE = "cobranca_vence_hoje"
+    COBRANCA_VENCIDA = "cobranca_vencida"
+    # A mesma cobrança vencida, avisada à professora.
+    COBRANCA_VENCIDA_PROFESSOR = "cobranca_vencida_professor"
 
 
 class StatusEnvio(enum.StrEnum):

@@ -852,3 +852,38 @@ def test_drive_fora_do_ar_nao_afeta_a_fila_na_tarefa(
     resultado = notificacao_service.executar_tarefa_agendada()
     assert resultado["enviadas"] == 1
     assert resultado["arquivos_removidos"] == 0
+
+
+def test_tarefa_agendada_gera_as_cobrancas_recorrentes(
+    client, professor, aluno_maior, drive, sessao, enviador_push, monkeypatch
+):
+    from src.models.financeiro import Cobranca, FrequenciaPlano, PlanoCobranca
+    from src.schemas.aluno import hoje
+
+    # Plano gravado direto, sem a geração imediata da rota.
+    plano = PlanoCobranca(
+        professor_id=professor.id,
+        aluno_id=aluno_maior.id,
+        descricao="Mensalidade",
+        valor_centavos=25000,
+        frequencia=FrequenciaPlano.SEMANAL,
+        dia_vencimento=hoje().weekday(),
+        inicio=hoje(),
+    )
+    sessao.add(plano)
+    sessao.commit()
+    monkeypatch.setattr(
+        notificacao_service, "obter_enviador_push", lambda: enviador_push
+    )
+    monkeypatch.setattr(notificacao_service, "obter_drive", lambda: drive)
+    monkeypatch.setattr(notificacao_service, "obter_engine", lambda: sessao.get_bind())
+    resultado = notificacao_service.executar_tarefa_agendada()
+    assert resultado["cobrancas_geradas"] == 2
+    assert (
+        sessao.scalar(
+            select(func.count())
+            .select_from(Cobranca)
+            .where(Cobranca.plano_id == plano.id)
+        )
+        == 2
+    )
