@@ -285,7 +285,7 @@ Campos que o aluno pode editar:
 | `DELETE /v1/arquivos/{id}` | Descarta um arquivo ainda não salvo. |
 
 - **Fluxo**: o arquivo sobe **antes** de salvar o formulário, em três passos: abrir a sessão, mandar o conteúdo com `PUT` direto à `url_upload` (a resposta do Google traz o `id`, sem passar pela API) e confirmar com esse valor em `drive_file_id`. Depois, a atividade ou a entrega recebe os ids em `arquivo_ids`. Detalhes em [Google Drive](../../api/docs/google_drive.md).
-- **Limites**: até 5 MB (`tamanho` em bytes), e até 10 arquivos enviados e não salvos por usuário (`409`). Tipos aceitos: PDF, PNG, JPEG, WebP, texto puro, Word, Excel e PowerPoint. Fora disso, `422` com `tipo` igual a `arquivo_muito_grande` ou `tipo_nao_permitido`.
+- **Limites**: até 5 MB (`tamanho` em bytes), e até 10 arquivos enviados e não salvos por usuário (`409`; uma sessão descartada antes do envio continua contando por até 7 dias, enquanto a URL de envio do Drive ainda aceita o conteúdo). Tipos aceitos: PDF, PNG, JPEG, WebP, texto puro, Word, Excel e PowerPoint. Fora disso, `422` com `tipo` igual a `arquivo_muito_grande` ou `tipo_nao_permitido`.
 - **Confirmação**: vale o que está no Drive, e não o declarado. Arquivo fora dos limites responde `422` e é apagado. Arquivo que não existe ou é de outra sessão responde `422` com `tipo` igual a `arquivo_nao_enviado`. Repetir a confirmação é seguro: use em caso de `503` ou timeout.
 - **Dono**: cada usuário vê e altera só os próprios arquivos. Os de outro usuário respondem `404`.
 - **Link**: `url` abre o arquivo para quem tem o link, sem login. A API só o entrega a quem tem acesso à atividade.

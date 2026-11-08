@@ -814,10 +814,10 @@ def test_tarefa_agendada_tambem_limpa_os_arquivos(
         json={"nome": "a.pdf", "tipo_mime": "application/pdf", "tamanho": 1},
         headers=cabecalho(professor),
     )
-    client.delete(
-        f"/v1/arquivos/{resposta.json()['dados']['arquivo_id']}",
-        headers=cabecalho(professor),
-    )
+    arquivo_id = resposta.json()["dados"]["arquivo_id"]
+    # Com o conteúdo já no Drive, o descarte é apagado na primeira execução.
+    drive.receber(arquivo_id)
+    client.delete(f"/v1/arquivos/{arquivo_id}", headers=cabecalho(professor))
     monkeypatch.setattr(
         notificacao_service, "obter_enviador_push", lambda: enviador_push
     )
