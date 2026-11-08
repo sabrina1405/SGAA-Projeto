@@ -12,6 +12,7 @@ from src.core.drive import ArmazenamentoDrive, FalhaDrive
 from src.core.security import agora
 from src.models.arquivo import Arquivo, StatusArquivo
 from src.models.atividade import AnexoAtividade, AnexoEntrega
+from src.models.material import AnexoPasta
 from src.models.usuario import Usuario
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,7 @@ def _sem_vinculo() -> ColumnElement[bool]:
     return and_(
         ~exists().where(AnexoAtividade.arquivo_id == Arquivo.id),
         ~exists().where(AnexoEntrega.arquivo_id == Arquivo.id),
+        ~exists().where(AnexoPasta.arquivo_id == Arquivo.id),
     )
 
 

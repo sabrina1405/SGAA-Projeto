@@ -12,6 +12,7 @@ from src.models.atividade import (
 from src.models.aula import Aula, AulaAluno, AulaGrupo, StatusAula, StatusParticipacao
 from src.models.codigo_verificacao import CodigoVerificacao
 from src.models.grupo import Grupo, GrupoAluno
+from src.models.material import AnexoPasta, Pasta, PastaAluno, PastaGrupo
 from src.models.notificacao import (
     Dispositivo,
     EnvioPush,
@@ -27,6 +28,7 @@ __all__ = [
     "Aluno",
     "AnexoAtividade",
     "AnexoEntrega",
+    "AnexoPasta",
     "Arquivo",
     "Atividade",
     "AtividadeAluno",
@@ -41,6 +43,9 @@ __all__ = [
     "Grupo",
     "GrupoAluno",
     "Notificacao",
+    "Pasta",
+    "PastaAluno",
+    "PastaGrupo",
     "Professor",
     "Recado",
     "RecadoAluno",
