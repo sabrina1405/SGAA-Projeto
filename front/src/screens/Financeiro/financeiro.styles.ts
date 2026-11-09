@@ -85,6 +85,12 @@ export const styles = StyleSheet.create({
         paddingHorizontal: 30,
     },
 
+  copyPixButton: {
+    height: 100,
+    padding: 0,
+    overflow: 'hidden',
+  },
+
   payButtonDisabled: {
     backgroundColor: '#cccccc',
   },

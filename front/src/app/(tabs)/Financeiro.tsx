@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { styles } from '@/screens/Home/Financeiro/financeiro.styles';
+import { styles } from '@/screens/Financeiro/financeiro.styles';
 import { obterPagamentos, type PagamentoApi } from '@/services/api';
 
 export const StatusConfig = {
@@ -345,10 +345,12 @@ export default function FinanceiroScreen() {
               : 'Nenhum vencimento próximo'}
           </Text>
 
-          <Pressable 
-            style={[!proximoVencimentoItem && styles.payButtonDisabled]}
-            onPress={handlePagarAgora}
-          >
+            <Pressable
+                disabled={!proximoVencimentoItem}
+                onPress={handlePagarAgora}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: !proximoVencimentoItem }}
+              >
             <LinearGradient
             start={{ x: 0.65, y: 0 }}
             end={{ x: 0.35, y: 1 }}

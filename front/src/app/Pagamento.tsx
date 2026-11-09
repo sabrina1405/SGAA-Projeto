@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import { styles } from '@/screens/Home/Financeiro/financeiro.styles';
+import { styles } from '@/screens/Financeiro/financeiro.styles';
 
 interface Transacao {
   id: string;
@@ -172,7 +172,7 @@ export default function InformacoesPagamentoScreen() {
             onPress={() => copiarChavePix(dados.chavePix)}
             accessibilityRole="button"
             accessibilityLabel="Copiar chave PIX"
-            style={[styles.payButton, { padding: 20, overflow: 'hidden' }]}
+            style={[styles.payButton, styles.copyPixButton]}
           >
             <LinearGradient
               start={{ x: 0.65, y: 0 }}

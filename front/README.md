@@ -13,6 +13,12 @@ Para mais comandos, confira o arquivo `package.json`
 - https://expo.dev/ (Infra para build pelo CLI, CI/CD pra mobile, deploy e monitoramento de produção )
 - (https://docs.expo.dev/develop/unit-testing/)
 
+## Segurança de autenticação
+
+- As telas privadas só são liberadas após validar a sessão com `/auth/me`; a API continua responsável por autorizar cada operação.
+- Tokens móveis são armazenados no `expo-secure-store`. Na web, o token fica apenas em memória e será descartado ao recarregar a página.
+- Configure `EXPO_PUBLIC_API_URL` com uma URL HTTPS para builds de produção. HTTP só é aceito em desenvolvimento local.
+
 ## Observações/Tarefas a fazer
 
 - versão do expo

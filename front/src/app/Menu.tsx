@@ -1,28 +1,25 @@
-import {
-  SafeAreaView,
-  ScrollView,
-  Text,
-  View,
-  Pressable,
-} from 'react-native';
+import { SafeAreaView, ScrollView, Text, View, Pressable, Alert, } from 'react-native';
 import { useState, type ReactNode } from 'react';
 
 import { Feather, MaterialCommunityIcons, FontAwesome5, MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { styles } from '@/screens/Home/menu.styles';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import { useAuthSession } from '@/contexts/auth-context';
 
 type MenuItemProps = {
   icon: ReactNode;
   label: string;
+  onPress?: () => void;
 };
 
-function MenuItem({ icon, label }: MenuItemProps) {
+function MenuItem({ icon, label, onPress }: MenuItemProps) {
   const [hovered, setHovered] = useState(false);
 
   return (
     <Pressable
       accessibilityRole="button"
+      onPress={onPress}
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
       style={({ pressed }) => [
@@ -37,6 +34,17 @@ function MenuItem({ icon, label }: MenuItemProps) {
 }
 
 export default function Menu() {
+  const { signOut } = useAuthSession();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Erro ao encerrar a sessão:', error);
+      Alert.alert('Erro', 'Não foi possível encerrar a sessão com segurança.');
+    }
+  };
+
   return (
     <View style={styles.overlay}>
       <Pressable
@@ -71,18 +79,43 @@ export default function Menu() {
           <View style={styles.separator} />
 
           <ScrollView>
-            <MenuItem icon={<Feather name="home" size={30} color="#fff" />} label="Início" />
-            <MenuItem icon={<FontAwesome5 name="calendar-check" size={30} color="#fff" />} label="Agenda" />
-            <MenuItem icon={<MaterialIcons name="checklist" size={30} color="#fff" />} label="Atividades" />
-            <MenuItem icon={<Ionicons name="cash-outline" size={30} color="#fff" />} label="Financeiro" />
-            <MenuItem icon={<FontAwesome5 name="folder-open" size={30} color="#fff" />} label="Arquivos" />
-            <MenuItem icon={<MaterialCommunityIcons name="nut" size={30} color="#fff" />} label="Configuração" />
+            <MenuItem
+              icon={<Feather name="home" size={30} color="#fff" />}
+              label="Início"
+              onPress={() => router.replace('/Home')}
+            />
+            <MenuItem
+              icon={<FontAwesome5 name="calendar-check" size={30} color="#fff" />}
+              label="Agenda"
+              onPress={() => router.replace('/Agenda')}
+            />
+            <MenuItem
+              icon={<MaterialIcons name="checklist" size={30} color="#fff" />}
+              label="Atividades"
+              onPress={() => router.replace('/Atividades')}
+            />
+            <MenuItem
+              icon={<Ionicons name="cash-outline" size={30} color="#fff" />}
+              label="Financeiro"
+              onPress={() => router.replace('/Financeiro')}
+            />
+            <MenuItem 
+            icon={<FontAwesome5 name="folder-open" size={30} color="#fff" />} 
+            label="Arquivos" 
+            onPress={() => router.replace('/Arquivos')}
+            />
+
+            <MenuItem icon={<Feather name="user" size={30} color="#fff" />} label="Perfil" />
             <MenuItem icon={<Feather name="send" size={30} color="#fff" />} label="Recados" />
             <MenuItem icon={<MaterialCommunityIcons name="account-school" size={30} color="#fff" />} label="Professor" />
 
             <View style={styles.separator} />
 
-            <MenuItem icon={<Feather name="log-out" size={30} color="#fff" />} label="Sair do App" />
+            <MenuItem
+              icon={<Feather name="log-out" size={30} color="#fff" />}
+              label="Sair do App"
+              onPress={() => void handleSignOut()}
+            />
           </ScrollView>
         </LinearGradient>
       </SafeAreaView>
