@@ -4,7 +4,7 @@ import { api } from '@/services/api';
 // MODO DEMONSTRAÇÃO: true = as aulas ficam só no front (sem back).
 // Para ligar de verdade ao back, troque para false.
 // ───────────────────────────────────────────────────────────────
-export const USAR_MOCK = true;
+export const USAR_MOCK = false;
 
 export type Escopo = 'esta' | 'esta_e_seguintes';
 export type StatusAulaApi = 'agendada' | 'realizada' | 'cancelada';

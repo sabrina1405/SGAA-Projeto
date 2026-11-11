@@ -5,4 +5,5 @@ export const STATUS_INFO: Record<StatusEvento, { rotulo: string; cor: string }> 
   confirmada: { rotulo: 'Confirmada', cor: '#2E7D32' },
   pendente: { rotulo: 'Pendente', cor: '#F5A623' },
   reposicao: { rotulo: 'Reposição', cor: '#B65FBF' },
+cancelada: { rotulo: 'Cancelada', cor: '#9E9E9E' },
 };

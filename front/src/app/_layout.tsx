@@ -20,7 +20,7 @@ function Guarda() {
   }, [deveIrParaLogin, deveIrParaInicio, router]);
 
   // Cobre a tela enquanto confere o token ou redireciona, para não piscar conteúdo protegido.
-  const bloqueado = estado === 'carregando' || deveIrParaLogin || deveIrParaInicio;
+ const bloqueado = estado === 'carregando' || deveIrParaLogin || deveIrParaInicio;
 
   return (
     <>
