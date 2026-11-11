@@ -1,15 +1,152 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { palette } from '@/constants/palette';
+import { listarEntregas } from '@/features/atividades/service';
+import type { EntregaListaItem, SituacaoEntrega } from '@/features/atividades/types';
 
-type FiltroAtividade = 'todas' | 'vencidas' | 'proximas' | 'entregues';
+type FiltroAtividade = 'todas' | SituacaoEntrega;
+type EstadoItem = 'vencida' | 'aberta' | 'entregue' | 'entregue_atraso';
+
+const TAMANHO_PAGINA = 20;
+
+const ABAS: { id: FiltroAtividade; label: string }[] = [
+  { id: 'todas', label: 'Todas' },
+  { id: 'vencidas', label: 'Vencidas' },
+  { id: 'proximas', label: 'Próximas' },
+  { id: 'entregues', label: 'Entregues' },
+];
+
+const VISUAL: Record<
+  EstadoItem,
+  { cor: string; fundo: string; texto: string; icone: keyof typeof Ionicons.glyphMap; badge: string }
+> = {
+  vencida: { cor: '#EF4444', fundo: '#FEE2E2', texto: '#DC2626', icone: 'alert-circle', badge: 'Vencida' },
+  aberta: { cor: '#F59E0B', fundo: '#FEF3C7', texto: '#D97706', icone: 'time', badge: 'Em Aberto' },
+  entregue: { cor: '#10B981', fundo: '#D1FAE5', texto: '#059669', icone: 'checkmark-done-circle', badge: 'Entregue' },
+  entregue_atraso: { cor: '#10B981', fundo: '#D1FAE5', texto: '#059669', icone: 'checkmark-done-circle', badge: 'Com atraso' },
+};
+
+function estadoDoItem(item: EntregaListaItem): EstadoItem {
+  if (item.status === 'entregue_com_atraso') return 'entregue_atraso';
+  if (item.status) return 'entregue';
+  return new Date(item.vence_em) < new Date() ? 'vencida' : 'aberta';
+}
+
+function formatarData(iso: string) {
+  return new Date(iso).toLocaleDateString('pt-BR');
+}
+
+function formatarHora(iso: string) {
+  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function textoRodape(item: EntregaListaItem, estado: EstadoItem) {
+  switch (estado) {
+    case 'vencida':
+      return `Prazo encerrado em ${formatarData(item.vence_em)}`;
+    case 'aberta':
+      return `Vence em ${formatarData(item.vence_em)} às ${formatarHora(item.vence_em)}`;
+    case 'entregue_atraso':
+      return `Entregue com atraso em ${item.enviada_em ? formatarData(item.enviada_em) : '-'}`;
+    default:
+      return `Enviado em ${item.enviada_em ? formatarData(item.enviada_em) : '-'}`;
+  }
+}
 
 export default function AtividadesScreen() {
   const router = useRouter();
   const [filtro, setFiltro] = useState<FiltroAtividade>('todas');
+  const [itens, setItens] = useState<EntregaListaItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [pagina, setPagina] = useState(1);
+  const [carregando, setCarregando] = useState(true);
+  const [carregandoMais, setCarregandoMais] = useState(false);
+  const [atualizando, setAtualizando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [contadores, setContadores] = useState<Partial<Record<SituacaoEntrega, number>>>({});
+
+  // Evita que uma resposta antiga sobrescreva a de um filtro mais novo.
+  const requisicao = useRef(0);
+
+  const carregarContadores = useCallback(async () => {
+    try {
+      const [vencidas, proximas, entregues] = await Promise.all([
+        listarEntregas('vencidas', 1, 1),
+        listarEntregas('proximas', 1, 1),
+        listarEntregas('entregues', 1, 1),
+      ]);
+      setContadores({
+        vencidas: vencidas.total,
+        proximas: proximas.total,
+        entregues: entregues.total,
+      });
+    } catch {
+      // Os contadores são só um complemento visual; falha silenciosa.
+    }
+  }, []);
+
+  const carregar = useCallback(
+    async (filtroAtual: FiltroAtividade, paginaAtual: number, modo: 'inicial' | 'mais' | 'refresh') => {
+      const id = ++requisicao.current;
+      if (modo === 'inicial') setCarregando(true);
+      if (modo === 'mais') setCarregandoMais(true);
+      if (modo === 'refresh') setAtualizando(true);
+      setErro(null);
+
+      try {
+        const situacao = filtroAtual === 'todas' ? undefined : filtroAtual;
+        const dados = await listarEntregas(situacao, paginaAtual, TAMANHO_PAGINA);
+        if (id !== requisicao.current) return;
+        setItens((atuais) => (paginaAtual === 1 ? dados.itens : [...atuais, ...dados.itens]));
+        setTotal(dados.total);
+        setPagina(paginaAtual);
+      } catch {
+        if (id !== requisicao.current) return;
+        setErro('Não foi possível carregar as atividades.');
+      } finally {
+        if (id === requisicao.current) {
+          setCarregando(false);
+          setCarregandoMais(false);
+          setAtualizando(false);
+        }
+      }
+    },
+    [],
+  );
+
+  // Recarrega ao abrir a tela, ao voltar de "Nova Atividade" e ao trocar de filtro.
+  useFocusEffect(
+    useCallback(() => {
+      carregar(filtro, 1, 'inicial');
+      carregarContadores();
+    }, [filtro, carregar, carregarContadores]),
+  );
+
+  function trocarFiltro(novo: FiltroAtividade) {
+    if (novo === filtro) return;
+    setItens([]);
+    setTotal(0);
+    setFiltro(novo);
+  }
+
+  function rotuloAba(aba: { id: FiltroAtividade; label: string }) {
+    if (aba.id === 'todas') return aba.label;
+    const qtd = contadores[aba.id];
+    return qtd === undefined ? aba.label : `${aba.label} (${qtd})`;
+  }
+
+  const temMais = itens.length < total;
 
   return (
     <View style={styles.container}>
@@ -28,90 +165,104 @@ export default function AtividadesScreen() {
 
         {/* Segmented Control / Tabs */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsContainer}>
-          {[
-            { id: 'todas', label: 'Todas' },
-            { id: 'vencidas', label: 'Vencidas (1)' },
-            { id: 'proximas', label: 'Próximas (1)' },
-            { id: 'entregues', label: 'Entregues (2)' },
-          ].map((tab) => (
+          {ABAS.map((tab) => (
             <Pressable
               key={tab.id}
               style={[styles.tabChip, filtro === tab.id && styles.tabChipAtivo]}
-              onPress={() => setFiltro(tab.id as FiltroAtividade)}
+              onPress={() => trocarFiltro(tab.id)}
             >
               <Text style={[styles.tabChipTexto, filtro === tab.id && styles.tabChipTextoAtivo]}>
-                {tab.label}
+                {rotuloAba(tab)}
               </Text>
             </Pressable>
           ))}
         </ScrollView>
       </View>
 
-      <ScrollView contentContainerStyle={styles.conteudo} showsVerticalScrollIndicator={false}>
-        {/* Atividade Vencida */}
-        {(filtro === 'todas' || filtro === 'vencidas') && (
-          <View style={[styles.card, { borderLeftColor: '#EF4444' }]}>
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#FEE2E2' }]}>
-                <Ionicons name="alert-circle" size={20} color="#EF4444" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Aula Espanhol 03</Text>
-                <Text style={styles.cardSub}>Aluno: Maria Silva</Text>
-              </View>
-              <View style={[styles.badge, { backgroundColor: '#FEE2E2' }]}>
-                <Text style={[styles.badgeText, { color: '#DC2626' }]}>Vencida</Text>
-              </View>
-            </View>
-            <View style={styles.cardFooter}>
-              <Ionicons name="calendar-outline" size={14} color={palette.textMuted} />
-              <Text style={styles.cardFooterText}>Prazo encerrado em 05/10/2026</Text>
-            </View>
+      <ScrollView
+        contentContainerStyle={styles.conteudo}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={atualizando}
+            onRefresh={() => {
+              carregar(filtro, 1, 'refresh');
+              carregarContadores();
+            }}
+          />
+        }
+      >
+        {carregando && (
+          <ActivityIndicator size="large" color={palette.title} style={styles.centralizado} />
+        )}
+
+        {!carregando && erro && (
+          <View style={styles.estadoVazio}>
+            <Ionicons name="cloud-offline-outline" size={32} color={palette.textMuted} />
+            <Text style={styles.estadoTexto}>{erro}</Text>
+            <Pressable
+              style={({ pressed }) => [styles.btnCriar, pressed && styles.pressionado]}
+              onPress={() => carregar(filtro, 1, 'inicial')}
+            >
+              <Text style={styles.btnCriarTexto}>Tentar novamente</Text>
+            </Pressable>
           </View>
         )}
 
-        {/* Próxima Atividade */}
-        {(filtro === 'todas' || filtro === 'proximas') && (
-          <View style={[styles.card, { borderLeftColor: '#F59E0B' }]}>
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#FEF3C7' }]}>
-                <Ionicons name="time" size={20} color="#F59E0B" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Atividade Espanhol 03</Text>
-                <Text style={styles.cardSub}>Aluno: João Pedro</Text>
-              </View>
-              <View style={[styles.badge, { backgroundColor: '#FEF3C7' }]}>
-                <Text style={[styles.badgeText, { color: '#D97706' }]}>Em Aberto</Text>
-              </View>
-            </View>
-            <View style={styles.cardFooter}>
-              <Ionicons name="calendar-outline" size={14} color={palette.textMuted} />
-              <Text style={styles.cardFooterText}>Vence em 22/10/2026 às 15:00</Text>
-            </View>
+        {!carregando && !erro && itens.length === 0 && (
+          <View style={styles.estadoVazio}>
+            <Ionicons name="document-text-outline" size={32} color={palette.textMuted} />
+            <Text style={styles.estadoTexto}>Nenhuma atividade encontrada.</Text>
           </View>
         )}
 
-        {/* Atividade Entregue */}
-        {(filtro === 'todas' || filtro === 'entregues') && (
-          <View style={[styles.card, { borderLeftColor: '#10B981' }]}>
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
-                <Ionicons name="checkmark-done-circle" size={20} color="#10B981" />
+        {!carregando &&
+          itens.map((item) => {
+            const estado = estadoDoItem(item);
+            const visual = VISUAL[estado];
+            const entregue = estado === 'entregue' || estado === 'entregue_atraso';
+
+            return (
+              <View
+                key={`${item.atividade_id}-${item.aluno_id}`}
+                style={[styles.card, { borderLeftColor: visual.cor }]}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: visual.fundo }]}>
+                    <Ionicons name={visual.icone} size={20} color={visual.cor} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cardTitle}>{item.titulo}</Text>
+                    <Text style={styles.cardSub}>Aluno: {item.aluno_nome}</Text>
+                  </View>
+                  <View style={[styles.badge, { backgroundColor: visual.fundo }]}>
+                    <Text style={[styles.badgeText, { color: visual.texto }]}>{visual.badge}</Text>
+                  </View>
+                </View>
+                <View style={styles.cardFooter}>
+                  <Ionicons
+                    name={entregue ? 'checkmark-circle-outline' : 'calendar-outline'}
+                    size={14}
+                    color={entregue ? '#10B981' : palette.textMuted}
+                  />
+                  <Text style={styles.cardFooterText}>{textoRodape(item, estado)}</Text>
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Exercício de Gramática 01</Text>
-                <Text style={styles.cardSub}>Aluno: Sofia Amorim</Text>
-              </View>
-              <View style={[styles.badge, { backgroundColor: '#D1FAE5' }]}>
-                <Text style={[styles.badgeText, { color: '#059669' }]}>Entregue</Text>
-              </View>
-            </View>
-            <View style={styles.cardFooter}>
-              <Ionicons name="checkmark-circle-outline" size={14} color="#10B981" />
-              <Text style={styles.cardFooterText}>Enviado em 08/10/2026</Text>
-            </View>
-          </View>
+            );
+          })}
+
+        {!carregando && !erro && temMais && (
+          <Pressable
+            style={({ pressed }) => [styles.btnMais, pressed && styles.pressionado]}
+            onPress={() => carregar(filtro, pagina + 1, 'mais')}
+            disabled={carregandoMais}
+          >
+            {carregandoMais ? (
+              <ActivityIndicator size="small" color={palette.title} />
+            ) : (
+              <Text style={styles.btnMaisTexto}>Carregar mais</Text>
+            )}
+          </Pressable>
         )}
       </ScrollView>
     </View>
@@ -177,4 +328,16 @@ const styles = StyleSheet.create({
   cardFooter: { flexDirection: 'row', alignItems: 'center', gap: 6, borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 8 },
   cardFooterText: { fontSize: 11, color: palette.textMuted, fontWeight: '500' },
   pressionado: { opacity: 0.8 },
+  centralizado: { marginTop: 32 },
+  estadoVazio: { alignItems: 'center', gap: 12, marginTop: 40 },
+  estadoTexto: { fontSize: 13, color: palette.textMuted, textAlign: 'center' },
+  btnMais: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+  },
+  btnMaisTexto: { fontSize: 12, fontWeight: '700', color: palette.title },
 });
+
