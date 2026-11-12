@@ -105,9 +105,14 @@ export default function Menu() {
             onPress={() => router.replace('/Arquivos')}
             />
 
-            <MenuItem icon={<Feather name="user" size={30} color="#fff" />} label="Perfil" />
-            <MenuItem icon={<Feather name="send" size={30} color="#fff" />} label="Recados" />
-            <MenuItem icon={<MaterialCommunityIcons name="account-school" size={30} color="#fff" />} label="Professor" />
+            <MenuItem icon={<Feather name="user" size={30} color="#fff" />} 
+            label="Perfil" 
+            onPress={() => router.replace('/Perfil')}
+            />
+            <MenuItem icon={<Feather name="send" size={30} color="#fff" />} 
+            label="Recados" 
+            onPress={() => router.replace('/Recados')}
+            />
 
             <View style={styles.separator} />
 
