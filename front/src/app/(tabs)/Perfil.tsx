@@ -7,11 +7,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { atualizarPerfilAluno, obterPerfilAluno } from '@/services/api';
 import {styles} from '@/screens/Login/perfil.styles';
 
-
 export default function PerfilScreen() {
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
-
   const [foto, setFoto] = useState<string | null>(null);
   const [nomeCompleto, setNomeCompleto] = useState('');
   const [dataNascimento, setDataNascimento] = useState('');
@@ -86,17 +84,28 @@ export default function PerfilScreen() {
   const handleSalvar = async () => {
     setSalvando(true);
     try {
-      const payload = menorDeIdade
-        ? {
-          nome_completo: nomeCompleto,
-          responsavel_nome: responsaveis,
-          responsavel_cpf: cpfResponsaveis,
-          responsavel_telefone: telefoneResponsaveis,
-        }
-        : {
-          nome_completo: nomeCompleto,
-          telefone,
-        };
+      const nome = nomeCompleto.trim();
+      if (!nome) {
+        throw new Error('Informe o nome completo antes de salvar.');
+      }
+
+      const payload: Record<string, string> = {
+        nome_completo: nome,
+      };
+
+      if (menorDeIdade) {
+        const responsavelNome = responsaveis.trim();
+        const responsavelCpf = cpfResponsaveis.trim();
+        const responsavelTelefone = telefoneResponsaveis.trim();
+
+        if (responsavelNome) payload.responsavel_nome = responsavelNome;
+        if (responsavelCpf) payload.responsavel_cpf = responsavelCpf;
+        if (responsavelTelefone) payload.responsavel_telefone = responsavelTelefone;
+      } else {
+        const telefoneFormatado = telefone.trim();
+        if (telefoneFormatado) payload.telefone = telefoneFormatado;
+      }
+
       const data = await atualizarPerfilAluno(payload);
 
       setNomeCompleto(data.nome_completo);
@@ -197,7 +206,7 @@ export default function PerfilScreen() {
             <TextInput
               style={styles.dateInput}
               value={dataNascimento}
-                editable={false}
+              editable={false}
               placeholder="DD/MM/AAAA"
               placeholderTextColor="#8B8790"
             />

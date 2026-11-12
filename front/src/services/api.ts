@@ -75,6 +75,28 @@ export interface PerfilAlunoAtualizacao {
   responsavel_telefone?: string;
 }
 
+export interface AlunoListaApi {
+  id: number;
+  nome_completo: string;
+  email: string;
+  telefone: string;
+}
+
+export interface AlunoDetalheApi {
+  id: number;
+  nome_completo: string;
+  email: string;
+  primeiro_acesso_concluido: boolean;
+  perfil: PerfilAlunoApi | null;
+  aulas: Record<string, never>[];
+  pagamentos: Record<string, never>[];
+}
+
+export interface CriarAlunoApiPayload {
+  nome_completo: string;
+  email: string;
+}
+
 export type StatusApi = 'vencida' | 'proxima' | 'realizada';
 
 export interface AulaApi {
@@ -356,6 +378,37 @@ export function atualizarPerfilAluno(
     body: dados,
   });
 }
+
+export function criarAluno(nomeCompleto: string, email: string): Promise<UsuarioApi> {
+  return requestApi<UsuarioApi>('/usuarios/alunos', {
+    method: 'POST',
+    body: { nome_completo: nomeCompleto, email },
+  });
+}
+
+export async function obterAlunos(
+  pagina = 1,
+  tamanho = 20,
+  busca?: string,
+): Promise<PaginaApi<AlunoListaApi>> {
+  const params = new URLSearchParams({
+    pagina: String(pagina),
+    tamanho: String(tamanho),
+  });
+
+  const termoBusca = busca?.trim();
+  if (termoBusca) {
+    params.set('busca', termoBusca);
+  }
+
+  return requestApi<PaginaApi<AlunoListaApi>>(`/usuarios/alunos?${params.toString()}`);
+}
+
+export function obterAluno(alunoId: number): Promise<AlunoDetalheApi> {
+  return requestApi<AlunoDetalheApi>(`/usuarios/alunos/${alunoId}`);
+}
+
+export const obterDetalheAluno = obterAluno;
 
 export function obterAulas(): Promise<AulaApi[]> {
   return requestApi<AulaApi[]>('/aulas');
@@ -653,13 +706,55 @@ export async function obterPagamentos(): Promise<PagamentoApi[]> {
   });
 }
 
+function toIsoDate(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function statusPorData(iso: string, concluido = false): StatusApi {
+  if (concluido) return 'realizada';
+  return new Date(iso).getTime() < Date.now() ? 'vencida' : 'proxima';
+}
+
+async function obterAulasHome(tipo: UsuarioApi['tipo']): Promise<AulaApi[]> {
+  const inicio = new Date();
+  const fim = new Date();
+  fim.setDate(fim.getDate() + 60);
+
+  const agenda = await obterAgenda(tipo, toIsoDate(inicio), toIsoDate(fim));
+
+  return agenda
+    .filter((a) => a.status !== 'cancelada' && a.participacao !== 'cancelada')
+    .map((a) => ({
+      id: a.id,
+      titulo: a.titulo,
+      data_hora: a.inicio,
+      descricao: a.descricao ?? '',
+      nome_aluno: a.alunos?.map((x) => x.nome_completo).join(', ') || null,
+      status: a.status === 'realizada' ? 'realizada' : statusPorData(a.inicio),
+    }));
+}
+
+async function obterAtividadesHome(): Promise<AtividadeApi[]> {
+  const minhas = await obterMinhasAtividades();
+  return minhas.map((a) => ({
+    id: a.id,
+    titulo: a.titulo,
+    data_hora: a.vence_em,
+    descricao: `Professor(a): ${a.professor_nome}`,
+    status: statusPorData(a.vence_em, a.status !== null),
+  }));
+}
+
 export async function obterDadosHome(): Promise<HomeApiResponse> {
-  const [usuario, aulas, atividades, pagamentos] = await Promise.all([
-    obterUsuarioAtual(),
-    obterAulas(),
-    obterAtividades(),
-    obterPagamentos(),
+  const usuario = await obterUsuarioAtual();
+  const ehAluno = usuario.tipo === 'aluno';
+
+  const [aulas, atividades, pagamentos] = await Promise.all([
+    obterAulasHome(usuario.tipo),
+    ehAluno ? obterAtividadesHome() : obterAtividades(),
+    ehAluno ? obterPagamentos() : Promise.resolve([] as PagamentoApi[]),
   ]);
 
   return { usuario, aulas, atividades, pagamentos };
-}
+} 
