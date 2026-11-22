@@ -1,15 +1,55 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { palette } from '@/constants/palette';
+import { ArquivoSelecionado, LIMITE_BYTES, enviarArquivo } from '@/services/arquivo-service';
 
 export default function NovoArquivoScreen() {
   const router = useRouter();
   const [titulo, setTitulo] = useState('');
   const [aluno, setAluno] = useState('');
   const [grupo, setGrupo] = useState('');
+  const [arquivo, setArquivo] = useState<ArquivoSelecionado | null>(null);
+  const [enviando, setEnviando] = useState(false);
+
+  async function escolherArquivo() {
+    const resultado = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
+    if (resultado.canceled) return;
+
+    const item = resultado.assets[0];
+    if (item.size && item.size > LIMITE_BYTES) {
+      Alert.alert('Arquivo grande demais', 'O limite é de 5 MB.');
+      return;
+    }
+
+    setArquivo({
+      uri: item.uri,
+      nome: item.name,
+      tipoMime: item.mimeType ?? 'application/octet-stream',
+      tamanho: item.size ?? 0,
+    });
+  }
+
+  async function enviar() {
+    if (!arquivo) {
+      Alert.alert('Selecione um arquivo');
+      return;
+    }
+
+    setEnviando(true);
+    try {
+      const token = ''; // pegue do seu contexto/storage de autenticação
+      await enviarArquivo(token, arquivo);
+      router.back();
+    } catch (erro) {
+      Alert.alert('Erro', erro instanceof Error ? erro.message : 'Falha ao enviar.');
+    } finally {
+      setEnviando(false);
+    }
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.conteudo} showsVerticalScrollIndicator={false}>
@@ -31,11 +71,13 @@ export default function NovoArquivoScreen() {
         {/* Zona de Upload / Seleção de Arquivo */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Arquivo (PDF, DOCX, Mídia)</Text>
-          <Pressable style={styles.uploadBox}>
+          <Pressable style={styles.uploadBox} onPress={escolherArquivo} disabled={enviando}>
             <View style={styles.uploadIconCircle}>
               <Ionicons name="cloud-upload-outline" size={24} color={palette.title} />
             </View>
-            <Text style={styles.uploadTextMain}>Toque para selecionar o arquivo</Text>
+            <Text style={styles.uploadTextMain}>
+              {arquivo ? arquivo.nome : 'Toque para selecionar o arquivo'}
+            </Text>
             <Text style={styles.uploadTextSub}>Suporta PDF, Word e compactados (máx. 25MB)</Text>
           </Pressable>
         </View>
@@ -69,15 +111,21 @@ export default function NovoArquivoScreen() {
         <Pressable
           style={({ pressed }) => [styles.btnAcao, styles.btnCancelar, pressed && styles.pressionado]}
           onPress={() => router.back()}
+          disabled={enviando}
         >
           <Text style={styles.btnAcaoTexto}>Cancelar</Text>
         </Pressable>
 
         <Pressable
-          style={({ pressed }) => [styles.btnAcao, styles.btnSalvar, pressed && styles.pressionado]}
-          onPress={() => router.back()}
+          style={({ pressed }) => [
+            styles.btnAcao,
+            styles.btnSalvar,
+            (pressed || enviando) && styles.pressionado,
+          ]}
+          onPress={enviar}
+          disabled={enviando}
         >
-          <Text style={styles.btnAcaoTexto}>Enviar Arquivo</Text>
+          <Text style={styles.btnAcaoTexto}>{enviando ? 'Enviando...' : 'Enviar Arquivo'}</Text>
         </Pressable>
       </View>
     </ScrollView>

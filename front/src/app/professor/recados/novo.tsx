@@ -1,12 +1,50 @@
-import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View, TextInput, Pressable } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, View, TextInput, Pressable } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { palette } from '@/constants/palette';
+import { criarRecado, obterRecadoGeral, salvarRecadoGeral } from '@/services/recado-service';
 
 export default function NovaRecadoScreen() {
   const router = useRouter();
+  const { geral } = useLocalSearchParams<{ geral?: string }>();
+  const modoGeral = geral === '1';
+
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  // Ao editar o recado geral, já abre com o texto atual.
+  useEffect(() => {
+    if (!modoGeral) return;
+    const token = ''; // pegue do seu contexto/storage de autenticação
+    obterRecadoGeral(token)
+      .then((recado) => {
+        if (recado) setDescricao(recado.conteudo);
+      })
+      .catch(() => {});
+  }, [modoGeral]);
+
+  async function salvar() {
+    if (!descricao.trim()) {
+      Alert.alert('Preencha a descrição');
+      return;
+    }
+
+    setSalvando(true);
+    try {
+      const token = ''; // pegue do seu contexto/storage de autenticação
+      if (modoGeral) {
+        await salvarRecadoGeral(token, descricao.trim());
+      } else {
+        await criarRecado(token, { conteudo: descricao.trim(), todos_alunos: true });
+      }
+      router.back();
+    } catch (erro) {
+      Alert.alert('Erro', erro instanceof Error ? erro.message : 'Falha ao salvar o recado.');
+    } finally {
+      setSalvando(false);
+    }
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.conteudo}>
@@ -19,11 +57,11 @@ export default function NovaRecadoScreen() {
       </View>
 
       <View style={styles.acoesRow}>
-        <Pressable style={[styles.btnAcao, styles.btnCancelar]} onPress={() => router.back()}>
+        <Pressable style={[styles.btnAcao, styles.btnCancelar]} onPress={() => router.back()} disabled={salvando}>
           <Text style={styles.btnTexto}>Cancelar</Text>
         </Pressable>
-        <Pressable style={[styles.btnAcao, styles.btnSalvar]} onPress={() => router.back()}>
-          <Text style={styles.btnTexto}>Salvar</Text>
+        <Pressable style={[styles.btnAcao, styles.btnSalvar, salvando && { opacity: 0.8 }]} onPress={salvar} disabled={salvando}>
+          <Text style={styles.btnTexto}>{salvando ? 'Salvando...' : 'Salvar'}</Text>
         </Pressable>
       </View>
     </ScrollView>
