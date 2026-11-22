@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View, TextInput, Pressable } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { palette } from '@/constants/palette';
-import { criarRecado, obterRecadoGeral, salvarRecadoGeral } from '@/services/recado-service';
+import {
+  criarRecado,
+  mensagemDeErro,
+  obterRecadoGeral,
+  salvarRecadoGeral,
+} from '@/services/recado-service';
 
 export default function NovaRecadoScreen() {
   const router = useRouter();
@@ -16,8 +21,7 @@ export default function NovaRecadoScreen() {
   // Ao editar o recado geral, já abre com o texto atual.
   useEffect(() => {
     if (!modoGeral) return;
-    const token = ''; // pegue do seu contexto/storage de autenticação
-    obterRecadoGeral(token)
+    obterRecadoGeral()
       .then((recado) => {
         if (recado) setDescricao(recado.conteudo);
       })
@@ -32,15 +36,14 @@ export default function NovaRecadoScreen() {
 
     setSalvando(true);
     try {
-      const token = ''; // pegue do seu contexto/storage de autenticação
       if (modoGeral) {
-        await salvarRecadoGeral(token, descricao.trim());
+        await salvarRecadoGeral(descricao.trim());
       } else {
-        await criarRecado(token, { conteudo: descricao.trim(), todos_alunos: true });
+        await criarRecado({ conteudo: descricao.trim(), todos_alunos: true });
       }
       router.back();
     } catch (erro) {
-      Alert.alert('Erro', erro instanceof Error ? erro.message : 'Falha ao salvar o recado.');
+      Alert.alert('Erro', mensagemDeErro(erro, 'Falha ao salvar o recado.'));
     } finally {
       setSalvando(false);
     }

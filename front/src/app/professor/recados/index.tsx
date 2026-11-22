@@ -9,6 +9,7 @@ import {
   RecadoListaItem,
   limparRecadoGeral,
   listarRecados,
+  mensagemDeErro,
   obterRecadoGeral,
 } from '@/services/recado-service';
 
@@ -26,12 +27,11 @@ export default function RecadosScreen() {
 
   const carregar = useCallback(async () => {
     try {
-      const token = ''; // pegue do seu contexto/storage de autenticação
-      const [recadoGeral, lista] = await Promise.all([obterRecadoGeral(token), listarRecados(token)]);
+      const [recadoGeral, lista] = await Promise.all([obterRecadoGeral(), listarRecados()]);
       setGeral(recadoGeral);
       setRecados(lista.itens);
     } catch (erro) {
-      Alert.alert('Erro', erro instanceof Error ? erro.message : 'Falha ao carregar os recados.');
+      Alert.alert('Erro', mensagemDeErro(erro, 'Falha ao carregar os recados.'));
     } finally {
       setCarregando(false);
     }
@@ -53,11 +53,10 @@ export default function RecadosScreen() {
         onPress: async () => {
           setLimpando(true);
           try {
-            const token = ''; // pegue do seu contexto/storage de autenticação
-            await limparRecadoGeral(token);
+            await limparRecadoGeral();
             setGeral(null);
           } catch (erro) {
-            Alert.alert('Erro', erro instanceof Error ? erro.message : 'Falha ao limpar o painel.');
+            Alert.alert('Erro', mensagemDeErro(erro, 'Falha ao limpar o painel.'));
           } finally {
             setLimpando(false);
           }
