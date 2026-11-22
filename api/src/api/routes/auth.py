@@ -29,11 +29,12 @@ from src.schemas.auth import (
     PrimeiroAcessoValidarEntrada,
     RedefinirSenhaEntrada,
     TokenPrimeiroAcessoResposta,
+    PrimeiroAcessoProfessorEntrada,
     TokenResposta,
 )
 from src.schemas.resposta import Resposta
 from src.schemas.usuario import UsuarioResposta
-from src.services import auth_service, usuario_service
+from src.services import auth_service, dispositivo_service, usuario_service
 
 router = APIRouter(prefix="/auth", tags=["Autenticação"])
 
@@ -181,6 +182,52 @@ def primeiro_acesso_aluno(
     return Resposta(mensagem="Primeiro acesso concluído", dados=_dados_token(usuario))
 
 
+@router.post("/primeiro-acesso/professor")
+def primeiro_acesso_professor(
+    dados: PrimeiroAcessoProfessorEntrada,
+    usuario: UsuarioPrimeiroAcesso,
+    sessao: SessaoDep,
+) -> Resposta[TokenResposta]:
+    """Conclui o primeiro acesso do professor, definindo sua senha.
+
+    Exige Authorization: Bearer <token_primeiro_acesso>.
+    """
+    if usuario.tipo != TipoUsuario.PROFESSOR:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Sem permissão para esta ação",
+        )
+
+    if dados.nova_senha.get_secret_value().lower() == usuario.email:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A senha não pode ser igual ao e-mail",
+        )
+
+    # Evita conclusão simultânea do primeiro acesso.
+    sessao.refresh(usuario, with_for_update=True)
+
+    if usuario.senha is not None:
+        sessao.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Primeiro acesso já concluído",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    auth_service.definir_senha(
+        usuario,
+        dados.nova_senha.get_secret_value(),
+    )
+
+    sessao.commit()
+
+    return Resposta(
+        mensagem="Primeiro acesso concluído",
+        dados=_dados_token(usuario),
+    )
+
+
 @router.get("/me")
 def me(usuario: UsuarioAtual) -> Resposta[UsuarioResposta]:
     return Resposta(
@@ -229,5 +276,6 @@ def renovar(usuario: UsuarioAtual) -> Resposta[TokenResposta]:
 @router.post("/sair-de-todos")
 def sair_de_todos(usuario: UsuarioAtual, sessao: SessaoDep) -> Resposta[None]:
     auth_service.invalidar_tokens(usuario)
+    dispositivo_service.remover_todos(sessao, usuario)
     sessao.commit()
     return Resposta(mensagem="Sessões encerradas")
