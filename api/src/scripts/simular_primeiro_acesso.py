@@ -150,7 +150,9 @@ def main() -> int:
                     )
                     sessao.commit()
                 except ValidationError as erro:
-                    print("Nome inválido: " + "; ".join(i["msg"] for i in erro.errors()))
+                    print(
+                        "Nome inválido: " + "; ".join(i["msg"] for i in erro.errors())
+                    )
                     continue
                 except EmailJaCadastrado:
                     print("Esse e-mail já está em uso.")
