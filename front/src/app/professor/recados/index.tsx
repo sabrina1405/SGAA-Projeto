@@ -1,11 +1,70 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { palette } from '@/constants/palette';
+import {
+  RecadoGeral,
+  RecadoListaItem,
+  limparRecadoGeral,
+  listarRecados,
+  obterRecadoGeral,
+} from '@/services/recado-service';
+
+// AAAA-MM-DD -> DD/MM/AAAA
+function formatarData(iso: string) {
+  return iso.split('-').reverse().join('/');
+}
 
 export default function RecadosScreen() {
   const router = useRouter();
+  const [geral, setGeral] = useState<RecadoGeral | null>(null);
+  const [recados, setRecados] = useState<RecadoListaItem[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [limpando, setLimpando] = useState(false);
+
+  const carregar = useCallback(async () => {
+    try {
+      const token = ''; // pegue do seu contexto/storage de autenticação
+      const [recadoGeral, lista] = await Promise.all([obterRecadoGeral(token), listarRecados(token)]);
+      setGeral(recadoGeral);
+      setRecados(lista.itens);
+    } catch (erro) {
+      Alert.alert('Erro', erro instanceof Error ? erro.message : 'Falha ao carregar os recados.');
+    } finally {
+      setCarregando(false);
+    }
+  }, []);
+
+  // Recarrega sempre que a tela volta ao foco (ex.: depois de salvar um recado).
+  useFocusEffect(
+    useCallback(() => {
+      carregar();
+    }, [carregar]),
+  );
+
+  function confirmarLimpeza() {
+    Alert.alert('Limpar painel', 'Deseja limpar o recado geral?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Limpar',
+        style: 'destructive',
+        onPress: async () => {
+          setLimpando(true);
+          try {
+            const token = ''; // pegue do seu contexto/storage de autenticação
+            await limparRecadoGeral(token);
+            setGeral(null);
+          } catch (erro) {
+            Alert.alert('Erro', erro instanceof Error ? erro.message : 'Falha ao limpar o painel.');
+          } finally {
+            setLimpando(false);
+          }
+        },
+      },
+    ]);
+  }
 
   return (
     <View style={styles.container}>
@@ -20,46 +79,54 @@ export default function RecadosScreen() {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.conteudo} showsVerticalScrollIndicator={false}>
-        {/* Recado Ativo Principal */}
-        <Text style={styles.sectionTitle}>Recado Geral Ativo</Text>
-        <View style={styles.cardDestaque}>
-          <View style={styles.cardHeaderRow}>
-            <Ionicons name="pin" size={18} color="#D81B60" />
-            <Text style={styles.cardDestaqueTitle}>Aviso da Semana</Text>
-          </View>
-          <Text style={styles.cardTexto}>
-            Queridos alunos, sejam bem-vindos à nossa plataforma de estudos. Aqui vocês poderão consultar a agenda, pagamentos e eventos!
-          </Text>
-          <Pressable style={styles.linkBox}>
-            <Ionicons name="link-outline" size={16} color="#2563EB" />
-            <Text style={styles.linkTexto}>meet.jit.si/ElCaminoIdiomas</Text>
-          </Pressable>
-          <View style={styles.acoesRow}>
-            <Pressable style={styles.btnSecundario}>
-              <Text style={styles.btnSecundarioTexto}>Limpar Painel</Text>
-            </Pressable>
-            <Pressable style={styles.btnPrimario}>
-              <Text style={styles.btnPrimarioTexto}>Editar Recado</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        {/* Histórico */}
-        <Text style={styles.sectionTitle}>Histórico de Recados</Text>
-        {[
-          { id: 1, data: '01/10/2026', texto: 'Lembrete: Próxima semana teremos avaliação oral individual.' },
-          { id: 2, data: '20/09/2026', texto: 'Material complementar enviado na aba de arquivos.' },
-        ].map((recado) => (
-          <View key={recado.id} style={styles.cardHistorico}>
+      {carregando ? (
+        <ActivityIndicator style={{ marginTop: 40 }} color={palette.title} />
+      ) : (
+        <ScrollView contentContainerStyle={styles.conteudo} showsVerticalScrollIndicator={false}>
+          {/* Recado Ativo Principal */}
+          <Text style={styles.sectionTitle}>Recado Geral Ativo</Text>
+          <View style={styles.cardDestaque}>
             <View style={styles.cardHeaderRow}>
-              <Ionicons name="calendar-outline" size={14} color={palette.textMuted} />
-              <Text style={styles.historicoData}>{recado.data}</Text>
+              <Ionicons name="pin" size={18} color="#D81B60" />
+              <Text style={styles.cardDestaqueTitle}>Aviso da Semana</Text>
             </View>
-            <Text style={styles.cardTextoHistorico}>{recado.texto}</Text>
+            <Text style={styles.cardTexto}>{geral ? geral.conteudo : 'Nenhum recado geral ativo.'}</Text>
+            <View style={styles.acoesRow}>
+              <Pressable
+                style={[styles.btnSecundario, (!geral || limpando) && styles.pressionado]}
+                onPress={confirmarLimpeza}
+                disabled={!geral || limpando}
+              >
+                <Text style={styles.btnSecundarioTexto}>Limpar Painel</Text>
+              </Pressable>
+              <Pressable
+                style={styles.btnPrimario}
+                onPress={() => router.push('/professor/recados/novo?geral=1')}
+              >
+                <Text style={styles.btnPrimarioTexto}>Editar Recado</Text>
+              </Pressable>
+            </View>
           </View>
-        ))}
-      </ScrollView>
+
+          {/* Histórico */}
+          <Text style={styles.sectionTitle}>Histórico de Recados</Text>
+          {recados.length === 0 ? (
+            <View style={styles.cardHistorico}>
+              <Text style={styles.cardTextoHistorico}>Nenhum recado enviado.</Text>
+            </View>
+          ) : (
+            recados.map((recado) => (
+              <View key={recado.id} style={styles.cardHistorico}>
+                <View style={styles.cardHeaderRow}>
+                  <Ionicons name="calendar-outline" size={14} color={palette.textMuted} />
+                  <Text style={styles.historicoData}>{formatarData(recado.data_inicio)}</Text>
+                </View>
+                <Text style={styles.cardTextoHistorico}>{recado.conteudo}</Text>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      )}
     </View>
   );
 }
