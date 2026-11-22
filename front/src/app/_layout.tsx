@@ -6,18 +6,24 @@ import { palette } from '@/constants/palette';
 import { SessaoProvider, useSessao } from '@/features/auth/SessaoContext';
 
 function Guarda() {
-  const { estado } = useSessao();
+  const { estado, usuario } = useSessao();
   const segmentos = useSegments();
   const router = useRouter();
 
-  const emAuth = (segmentos[0] as string) === '(auth)';
+  const segmentosAtuais = segmentos as readonly string[];
+  const emAuth =
+    segmentosAtuais.includes('(auth)') ||
+    segmentosAtuais[0] === 'loginProfessor' ||
+    segmentosAtuais[0] === 'recuperar-senha';
   const deveIrParaLogin = estado === 'anonimo' && !emAuth;
   const deveIrParaInicio = estado === 'autenticado' && emAuth;
 
   useEffect(() => {
     if (deveIrParaLogin) router.replace('/loginProfessor');
-    else if (deveIrParaInicio) router.replace('/professor/inicio');
-  }, [deveIrParaLogin, deveIrParaInicio, router]);
+    else if (deveIrParaInicio) {
+      router.replace(usuario?.tipo === 'aluno' ? '/aluno/home' : '/professor/inicio');
+    }
+  }, [deveIrParaLogin, deveIrParaInicio, usuario?.tipo, router]);
 
   // Cobre a tela enquanto confere o token ou redireciona, para não piscar conteúdo protegido.
  const bloqueado = estado === 'carregando' || deveIrParaLogin || deveIrParaInicio;
