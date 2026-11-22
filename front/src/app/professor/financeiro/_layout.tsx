@@ -9,19 +9,13 @@ export default function FinanceiroLayout() {
         headerStyle: { backgroundColor: palette.header },
         headerTintColor: '#ffffff',
         headerTitleStyle: { fontWeight: '600' },
-         ...headerComMenu,
+        ...headerComMenu,
       }}
     >
       <Stack.Screen name="index" options={{ title: 'Financeiro' }} />
       {/* Rotas das telas secundárias com botão de voltar nativo */}
-      <Stack.Screen 
-        name="fluxo-de-caixa" 
-        options={{ title: 'Fluxo de Caixa' }} 
-      />
-      <Stack.Screen 
-        name="relatorio-financeiro" 
-        options={{ title: 'Relatório Financeiro' }} 
-      />
+      <Stack.Screen name="fluxoDeCaixa" options={{ title: 'Fluxo de Caixa' }} />
+      <Stack.Screen name="relatorioFinanceiro" options={{ title: 'Relatório Financeiro' }} />
     </Stack>
   );
 }

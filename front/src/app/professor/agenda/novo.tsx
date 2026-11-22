@@ -1,0 +1,586 @@
+import { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  Pressable,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+
+import { palette } from '@/constants/palette';
+import { USAR_MOCK, criarAula, mensagemDeErro } from '@/features/agenda/api';
+import { dataBRparaChave, paraISO } from '@/features/agenda/mappers';
+import { listarAlunos, mensagemDeErroAlunos } from '@/features/alunos/alunosService';
+import type { AlunoListaItem } from '@/features/alunos/types';
+
+// Formatadores visuais
+const formatarDataBR = (date: Date) => {
+  const dia = String(date.getDate()).padStart(2, '0');
+  const mes = String(date.getMonth() + 1).padStart(2, '0');
+  const ano = date.getFullYear();
+  return `${dia}/${mes}/${ano}`;
+};
+
+const formatarHora = (date: Date) => {
+  const horas = String(date.getHours()).padStart(2, '0');
+  const minutos = String(date.getMinutes()).padStart(2, '0');
+  return `${horas}:${minutos}`;
+};
+
+// Conversores para HTML na Web (YYYY-MM-DD e HH:MM)
+const formatarDataWeb = (date: Date) => {
+  const dia = String(date.getDate()).padStart(2, '0');
+  const mes = String(date.getMonth() + 1).padStart(2, '0');
+  const ano = date.getFullYear();
+  return `${ano}-${mes}-${dia}`;
+};
+
+const formatarHoraWeb = (date: Date) => {
+  return formatarHora(date);
+};
+
+const lerIds = (texto: string) =>
+  texto
+    .split(',')
+    .map((s) => parseInt(s.trim(), 10))
+    .filter((n) => Number.isInteger(n) && n > 0);
+
+// Busca sem diferenciar maiúsculas nem acentos
+const normalizar = (texto: string) =>
+  texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+const LIMITE_OPCOES = 6;
+
+export default function CriarAulaScreen() {
+  const router = useRouter();
+
+  const [titulo, setTitulo] = useState('');
+
+  // Estados com Objetos Date
+  const [dataObj, setDataObj] = useState(new Date());
+  const [horaInicioObj, setHoraInicioObj] = useState(() => {
+    const d = new Date();
+    d.setHours(10, 0, 0, 0);
+    return d;
+  });
+  const [horaFimObj, setHoraFimObj] = useState(() => {
+    const d = new Date();
+    d.setHours(11, 0, 0, 0);
+    return d;
+  });
+
+  // Controle do picker no mobile
+  const [tipoPickerAtivo, setTipoPickerAtivo] = useState<'data' | 'inicio' | 'fim' | null>(null);
+
+  const [aluno, setAluno] = useState(''); // usado só no modo mock
+  const [grupo, setGrupo] = useState('');
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+
+  // Seleção de alunos (API)
+  const [alunosDisponiveis, setAlunosDisponiveis] = useState<AlunoListaItem[]>([]);
+  const [selecionados, setSelecionados] = useState<number[]>([]);
+  const [busca, setBusca] = useState('');
+  const [carregandoAlunos, setCarregandoAlunos] = useState(!USAR_MOCK);
+  const [erroAlunos, setErroAlunos] = useState('');
+
+  useEffect(() => {
+    if (USAR_MOCK) return;
+    let ativo = true;
+    (async () => {
+      try {
+        const todos: AlunoListaItem[] = [];
+        let pagina = 1;
+        // Junta todas as páginas para poder filtrar na própria tela.
+        while (true) {
+          const dados = await listarAlunos({ pagina });
+          todos.push(...dados.itens);
+          if (dados.itens.length === 0 || todos.length >= dados.total || pagina >= 50) break;
+          pagina += 1;
+        }
+        if (ativo) setAlunosDisponiveis(todos);
+      } catch (e) {
+        if (ativo) setErroAlunos(mensagemDeErroAlunos(e));
+      } finally {
+        if (ativo) setCarregandoAlunos(false);
+      }
+    })();
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  const alternarAluno = (id: number) =>
+    setSelecionados((atual) => (atual.includes(id) ? atual.filter((x) => x !== id) : [...atual, id]));
+
+  const termo = normalizar(busca.trim());
+  const filtrados = alunosDisponiveis.filter(
+    (a) => !termo || normalizar(a.nome_completo).includes(termo) || normalizar(a.email).includes(termo),
+  );
+  const opcoes = filtrados.slice(0, LIMITE_OPCOES);
+  const alunosSelecionados = alunosDisponiveis.filter((a) => selecionados.includes(a.id));
+
+  const handleSalvar = async () => {
+    if (salvando) return;
+
+    const dataTexto = formatarDataBR(dataObj);
+    const horaInicioTexto = formatarHora(horaInicioObj);
+    const horaFimTexto = formatarHora(horaFimObj);
+
+    const dataChave = dataBRparaChave(dataTexto);
+    const alunoIds = USAR_MOCK ? lerIds(aluno) : selecionados;
+    const grupoIds = lerIds(grupo);
+    const nomes = aluno.split(',').map((s) => s.trim()).filter(Boolean);
+
+    if (!titulo.trim()) return setErro('Informe o título da aula.');
+    if (!dataChave) return setErro('Data inválida.');
+    if (horaFimObj <= horaInicioObj) return setErro('O horário de fim deve ser depois do início.');
+
+    if (USAR_MOCK) {
+      if (nomes.length === 0) return setErro('Informe ao menos um aluno.');
+    } else if (alunoIds.length === 0 && grupoIds.length === 0) {
+      return setErro('Selecione ao menos um aluno ou informe um grupo (IDs separados por vírgula).');
+    }
+
+    setErro(null);
+    setSalvando(true);
+    try {
+      await criarAula({
+        titulo: titulo.trim(),
+        inicio: paraISO(dataChave, horaInicioTexto),
+        fim: paraISO(dataChave, horaFimTexto),
+        aluno_ids: alunoIds,
+        grupo_ids: grupoIds,
+        nomes_mock: nomes,
+      });
+      router.navigate({ pathname: '/professor/agenda', params: { data: dataChave } });
+    } catch (e) {
+      setErro(mensagemDeErro(e));
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  // Tratores de mudança no Mobile
+  const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') setTipoPickerAtivo(null);
+    if (event.type === 'set' && selectedDate) setDataObj(selectedDate);
+  };
+
+  const onInicioChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') setTipoPickerAtivo(null);
+    if (event.type === 'set' && selectedDate) setHoraInicioObj(selectedDate);
+  };
+
+  const onFimChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') setTipoPickerAtivo(null);
+    if (event.type === 'set' && selectedDate) setHoraFimObj(selectedDate);
+  };
+
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
+    >
+      <ScrollView
+        contentContainerStyle={styles.conteudo}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.cardForm}>
+          <Text style={styles.cardHeaderTitle}>Informações de Aula</Text>
+
+          {/* Título */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Título</Text>
+            <TextInput
+              style={styles.input}
+              value={titulo}
+              onChangeText={setTitulo}
+              maxLength={75}
+              placeholder="Aula de Espanhol 03"
+              placeholderTextColor="#9CA3AF"
+            />
+          </View>
+
+          {/* Data da Aula */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Data da Aula</Text>
+            {Platform.OS === 'web' ? (
+              <input
+                type="date"
+                style={styles.inputWeb as any}
+                value={formatarDataWeb(dataObj)}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    const [ano, mes, dia] = e.target.value.split('-').map(Number);
+                    setDataObj(new Date(ano, mes - 1, dia));
+                  }
+                }}
+              />
+            ) : (
+              <>
+                <Pressable
+                  style={({ pressed }) => [styles.selectorButton, pressed && styles.pressionado]}
+                  onPress={() => setTipoPickerAtivo('data')}
+                >
+                  <Ionicons name="calendar-outline" size={20} color={palette.title} />
+                  <Text style={styles.selectorText}>{formatarDataBR(dataObj)}</Text>
+                  <Ionicons name="chevron-down" size={16} color={palette.textMuted} style={{ marginLeft: 'auto' }} />
+                </Pressable>
+
+                {tipoPickerAtivo === 'data' && (
+                  <DateTimePicker
+                    value={dataObj}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={onDateChange}
+                  />
+                )}
+                {Platform.OS === 'ios' && tipoPickerAtivo === 'data' && (
+                  <Pressable style={styles.btnConfirmarPicker} onPress={() => setTipoPickerAtivo(null)}>
+                    <Text style={styles.btnConfirmarTexto}>Concluir Data</Text>
+                  </Pressable>
+                )}
+              </>
+            )}
+          </View>
+
+          {/* Horários (Início e Fim) */}
+          <View style={styles.linhaDupla}>
+            {/* Início */}
+            <View style={[styles.inputGroup, { flex: 1 }]}>
+              <Text style={styles.label}>Início</Text>
+              {Platform.OS === 'web' ? (
+                <input
+                  type="time"
+                  style={styles.inputWeb as any}
+                  value={formatarHoraWeb(horaInicioObj)}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      const [h, m] = e.target.value.split(':').map(Number);
+                      const d = new Date(horaInicioObj);
+                      d.setHours(h, m, 0, 0);
+                      setHoraInicioObj(d);
+                    }
+                  }}
+                />
+              ) : (
+                <>
+                  <Pressable
+                    style={({ pressed }) => [styles.selectorButton, pressed && styles.pressionado]}
+                    onPress={() => setTipoPickerAtivo('inicio')}
+                  >
+                    <Ionicons name="time-outline" size={18} color={palette.title} />
+                    <Text style={styles.selectorText}>{formatarHora(horaInicioObj)}</Text>
+                  </Pressable>
+
+                  {tipoPickerAtivo === 'inicio' && (
+                    <DateTimePicker
+                      value={horaInicioObj}
+                      mode="time"
+                      is24Hour={true}
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      onChange={onInicioChange}
+                    />
+                  )}
+                  {Platform.OS === 'ios' && tipoPickerAtivo === 'inicio' && (
+                    <Pressable style={styles.btnConfirmarPicker} onPress={() => setTipoPickerAtivo(null)}>
+                      <Text style={styles.btnConfirmarTexto}>Concluir Início</Text>
+                    </Pressable>
+                  )}
+                </>
+              )}
+            </View>
+
+            {/* Fim */}
+            <View style={[styles.inputGroup, { flex: 1 }]}>
+              <Text style={styles.label}>Fim</Text>
+              {Platform.OS === 'web' ? (
+                <input
+                  type="time"
+                  style={styles.inputWeb as any}
+                  value={formatarHoraWeb(horaFimObj)}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      const [h, m] = e.target.value.split(':').map(Number);
+                      const d = new Date(horaFimObj);
+                      d.setHours(h, m, 0, 0);
+                      setHoraFimObj(d);
+                    }
+                  }}
+                />
+              ) : (
+                <>
+                  <Pressable
+                    style={({ pressed }) => [styles.selectorButton, pressed && styles.pressionado]}
+                    onPress={() => setTipoPickerAtivo('fim')}
+                  >
+                    <Ionicons name="time-outline" size={18} color={palette.title} />
+                    <Text style={styles.selectorText}>{formatarHora(horaFimObj)}</Text>
+                  </Pressable>
+
+                  {tipoPickerAtivo === 'fim' && (
+                    <DateTimePicker
+                      value={horaFimObj}
+                      mode="time"
+                      is24Hour={true}
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      onChange={onFimChange}
+                    />
+                  )}
+                  {Platform.OS === 'ios' && tipoPickerAtivo === 'fim' && (
+                    <Pressable style={styles.btnConfirmarPicker} onPress={() => setTipoPickerAtivo(null)}>
+                      <Text style={styles.btnConfirmarTexto}>Concluir Fim</Text>
+                    </Pressable>
+                  )}
+                </>
+              )}
+            </View>
+          </View>
+
+          {/* Alunos */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Selecionar Alunos</Text>
+
+            {USAR_MOCK ? (
+              <TextInput
+                style={styles.input}
+                placeholder="Nome do aluno (ex.: José)"
+                placeholderTextColor="#9CA3AF"
+                value={aluno}
+                onChangeText={setAluno}
+              />
+            ) : (
+              <>
+                {alunosSelecionados.length > 0 && (
+                  <View style={styles.chipsRow}>
+                    {alunosSelecionados.map((a) => (
+                      <Pressable
+                        key={a.id}
+                        style={({ pressed }) => [styles.chip, pressed && styles.pressionado]}
+                        onPress={() => alternarAluno(a.id)}
+                      >
+                        <Text style={styles.chipTexto}>{a.nome_completo}</Text>
+                        <Ionicons name="close" size={14} color={palette.header} />
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+
+                <TextInput
+                  style={styles.input}
+                  placeholder="Pesquisar aluno por nome ou e-mail..."
+                  placeholderTextColor="#9CA3AF"
+                  value={busca}
+                  onChangeText={setBusca}
+                />
+
+                <View style={styles.listaAlunos}>
+                  {carregandoAlunos ? (
+                    <ActivityIndicator color={palette.header} style={{ margin: 12 }} />
+                  ) : erroAlunos ? (
+                    <Text style={styles.estadoAlunos}>{erroAlunos}</Text>
+                  ) : opcoes.length === 0 ? (
+                    <Text style={styles.estadoAlunos}>Nenhum aluno encontrado.</Text>
+                  ) : (
+                    opcoes.map((a) => {
+                      const marcado = selecionados.includes(a.id);
+                      return (
+                        <Pressable
+                          key={a.id}
+                          style={({ pressed }) => [styles.alunoOpcao, pressed && styles.pressionado]}
+                          onPress={() => alternarAluno(a.id)}
+                        >
+                          <Ionicons
+                            name={marcado ? 'checkbox' : 'square-outline'}
+                            size={20}
+                            color={marcado ? palette.header : palette.textMuted}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.alunoNome}>{a.nome_completo}</Text>
+                            <Text style={styles.alunoEmail}>{a.email}</Text>
+                          </View>
+                        </Pressable>
+                      );
+                    })
+                  )}
+                  {!carregandoAlunos && !erroAlunos && filtrados.length > LIMITE_OPCOES && (
+                    <Text style={styles.estadoAlunos}>
+                      Mostrando {LIMITE_OPCOES} de {filtrados.length}. Refine a busca.
+                    </Text>
+                  )}
+                </View>
+              </>
+            )}
+          </View>
+
+          {/* Grupo */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Selecionar Grupo</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Opcional"
+              placeholderTextColor="#9CA3AF"
+              value={grupo}
+              onChangeText={setGrupo}
+            />
+          </View>
+        </View>
+
+        {erro && <Text style={styles.erro}>{erro}</Text>}
+
+        {/* Botões de Ação */}
+        <View style={styles.acoesRow}>
+          <Pressable
+            style={({ pressed }) => [styles.btnAcao, styles.btnCancelar, pressed && styles.pressionado]}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.btnAcaoTexto}>Cancelar</Text>
+          </Pressable>
+
+          <Pressable
+            disabled={salvando}
+            style={({ pressed }) => [styles.btnAcao, styles.btnSalvar, (pressed || salvando) && styles.pressionado]}
+            onPress={handleSalvar}
+          >
+            <Text style={styles.btnAcaoTexto}>{salvando ? 'Salvando...' : 'Salvar'}</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: palette.background },
+  conteudo: { padding: 16, paddingBottom: 40, gap: 20 },
+  cardForm: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: palette.line,
+    gap: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  cardHeaderTitle: { fontSize: 14, fontWeight: '700', color: palette.title, marginBottom: 4 },
+  inputGroup: { gap: 6 },
+  linhaDupla: { flexDirection: 'row', gap: 10 },
+  label: { fontSize: 11, fontWeight: '600', color: palette.title },
+  input: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: palette.line,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: palette.title,
+    fontWeight: '500',
+  },
+
+  inputWeb: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: palette.line,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: palette.title,
+    fontWeight: '500',
+    width: '100%',
+    boxSizing: 'border-box',
+  } as any,
+  selectorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: palette.line,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  selectorText: {
+    fontSize: 13,
+    color: palette.title,
+    fontWeight: '600',
+  },
+  btnConfirmarPicker: {
+    backgroundColor: palette.button || '#2E7D32',
+    paddingVertical: 6,
+    borderRadius: 6,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  btnConfirmarTexto: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F3E5F5',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  chipTexto: { fontSize: 12, fontWeight: '600', color: palette.header },
+  listaAlunos: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: palette.line,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  alunoOpcao: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: palette.line,
+  },
+  alunoNome: { fontSize: 13, fontWeight: '600', color: palette.title },
+  alunoEmail: { fontSize: 11, color: palette.textMuted },
+  estadoAlunos: { fontSize: 12, color: palette.textMuted, textAlign: 'center', padding: 12 },
+
+  erro: { color: '#C62828', fontSize: 12, fontWeight: '600' },
+  acoesRow: { flexDirection: 'row', gap: 12, marginTop: 10 },
+  btnAcao: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  btnCancelar: { backgroundColor: '#C62828' },
+  btnSalvar: { backgroundColor: '#2E7D32' },
+  btnAcaoTexto: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+  pressionado: { opacity: 0.8 },
+  
+});

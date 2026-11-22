@@ -1,14 +1,18 @@
-import { useMemo } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 import { palette } from '@/constants/palette';
+import {
+  buscarResumo,
+  cobrancasParaLancamentos,
+  listarCobrancas,
+  type Cobranca,
+} from '@/features/financeiro/api';
 import { FilterButton } from '@/features/financeiro/components/filter-button';
 import { LancamentoRow, LancamentosHeader } from '@/features/financeiro/components/lancamento-row';
 import { SummaryCard } from '@/features/financeiro/components/summary-card';
-import { LANCAMENTOS_MOCK } from '@/features/financeiro/mock';
-import { calcularResumo } from '@/features/financeiro/utils';
 
 function Separador() {
   return <View style={styles.separador} />;
@@ -16,8 +20,60 @@ function Separador() {
 
 export default function FinanceiroScreen() {
   const router = useRouter();
-  const lancamentos = LANCAMENTOS_MOCK;
-  const resumo = useMemo(() => calcularResumo(lancamentos), [lancamentos]);
+
+  const [previsao, setPrevisao] = useState<number | null>(null);
+  const [erroResumo, setErroResumo] = useState(false);
+
+  const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
+  const [total, setTotal] = useState(0);
+  const [pagina, setPagina] = useState(1);
+  const [carregando, setCarregando] = useState(true);
+  const [carregandoMais, setCarregandoMais] = useState(false);
+  const [atualizando, setAtualizando] = useState(false);
+  const [erroLista, setErroLista] = useState(false);
+
+const lancamentos = useMemo(() => cobrancasParaLancamentos(cobrancas), [cobrancas]);
+
+  const carregarResumo = useCallback(async () => {
+    try {
+      const r = await buscarResumo();
+      setPrevisao((r.pendente_centavos + r.vencido_centavos) / 100);
+      setErroResumo(false);
+    } catch (e: any) {
+      console.log('resumo falhou:', e?.response?.status, e?.response?.data ?? e?.message);
+      setErroResumo(true);
+    }
+  }, []);
+
+  const carregarLista = useCallback(async (proxima: number) => {
+    try {
+      const res = await listarCobrancas({ pagina: proxima });
+      setCobrancas((atual) => (proxima === 1 ? res.itens : [...atual, ...res.itens]));
+      setTotal(res.total);
+      setPagina(proxima);
+      setErroLista(false);
+    } catch (e: any) {
+      console.log('cobrancas falhou:', e?.response?.status, e?.response?.data ?? e?.message);
+      setErroLista(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    Promise.all([carregarResumo(), carregarLista(1)]).finally(() => setCarregando(false));
+  }, [carregarResumo, carregarLista]);
+
+  async function atualizar() {
+    setAtualizando(true);
+    await Promise.all([carregarResumo(), carregarLista(1)]);
+    setAtualizando(false);
+  }
+
+  async function carregarMais() {
+    if (carregando || carregandoMais || erroLista || cobrancas.length >= total) return;
+    setCarregandoMais(true);
+    await carregarLista(pagina + 1);
+    setCarregandoMais(false);
+  }
 
   return (
     <FlatList
@@ -27,25 +83,39 @@ export default function FinanceiroScreen() {
       keyExtractor={(item) => item.id}
       renderItem={({ item }) => <LancamentoRow item={item} />}
       ItemSeparatorComponent={Separador}
-      ListEmptyComponent={<Text style={styles.vazio}>Nenhum lançamento encontrado.</Text>}
+      refreshing={atualizando}
+      onRefresh={atualizar}
+      onEndReached={carregarMais}
+      onEndReachedThreshold={0.4}
+      ListEmptyComponent={
+        carregando ? (
+          <ActivityIndicator style={styles.vazio} color={palette.header} />
+        ) : (
+          <Text style={styles.vazio}>
+            {erroLista
+              ? 'Não foi possível carregar os lançamentos.'
+              : 'Nenhum lançamento encontrado.'}
+          </Text>
+        )
+      }
+      ListFooterComponent={
+        carregandoMais ? <ActivityIndicator style={styles.rodape} color={palette.header} /> : null
+      }
       ListHeaderComponent={
         <View>
           <Text style={styles.titulo}>Resumo Financeiro</Text>
 
           <View style={styles.cards}>
             <SummaryCard
-              titulo="Saldo"
-              valor={resumo.saldo}
-              fundo={palette.saldo.fundo}
-              corValor={palette.saldo.valor}
-            />
-            <SummaryCard
               titulo="Previsão de entradas:"
-              valor={resumo.previsaoEntradas}
+              valor={previsao ?? 0}
               fundo={palette.previsao.fundo}
               corValor={palette.previsao.valor}
             />
           </View>
+          {erroResumo && (
+            <Text style={styles.erroResumo}>Não foi possível carregar o resumo.</Text>
+          )}
 
           {/* Atalhos para as outras telas do Módulo Financeiro */}
           <View style={styles.atalhosContainer}>
@@ -101,7 +171,7 @@ const styles = StyleSheet.create({
   conteudo: { padding: 16, paddingBottom: 32 },
   titulo: { fontSize: 16, fontWeight: '700', color: palette.title, marginBottom: 16 },
   cards: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  
+
   /* Novos Estilos dos Cards de Atalho */
   atalhosContainer: { gap: 10, marginBottom: 20 },
   cardAtalho: {
@@ -137,4 +207,6 @@ const styles = StyleSheet.create({
   pressionado: { opacity: 0.8 },
   separador: { height: StyleSheet.hairlineWidth, backgroundColor: palette.line },
   vazio: { textAlign: 'center', color: palette.textMuted, marginTop: 24 },
+  erroResumo: { textAlign: 'center', color: palette.textMuted, marginBottom: 16 },
+  rodape: { marginTop: 16 },
 });

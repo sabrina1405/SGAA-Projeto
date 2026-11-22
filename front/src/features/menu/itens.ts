@@ -14,10 +14,11 @@ export const ITENS_MENU: ItemMenu[] = [
   { rotulo: 'Inicio', icone: 'home-outline', rota: '/professor' },
   { rotulo: 'Alunos', icone: 'people-outline', rota: '/professor/alunos' },
   { rotulo: 'Agenda', icone: 'calendar-outline', rota: '/professor/agenda' },
-  { rotulo: 'Atividades', icone: 'checkmark-done-outline' }, // TODO: criar rota
+  { rotulo: 'Atividades', icone: 'checkmark-done-outline', rota:'/professor/atividades' }, 
   { rotulo: 'Financeiro', icone: 'cash-outline', rota: '/professor/financeiro' },
-  { rotulo: 'Arquivos', icone: 'folder-open-outline' }, // TODO: criar rota
-  { rotulo: 'Relatórios', icone: 'layers-outline' }, // TODO: criar rota
-  { rotulo: 'Configurações', icone: 'settings-outline' }, // TODO: criar rota
-  { rotulo: 'Recados', icone: 'mail-outline' }, // TODO: criar rota
+  { rotulo: 'Arquivos', icone: 'folder-open-outline', rota:"/professor/arquivos" },
+  { rotulo: 'Relatórios', icone: 'layers-outline', rota:"/professor/financeiro/relatorioFinanceiro"}, 
+  { rotulo: 'Recados', icone: 'mail-outline', rota: '/professor/recados' }, 
+  { rotulo: 'Configurações', icone: 'settings-outline', rota: "/professor/perfil" }, 
+  
 ];

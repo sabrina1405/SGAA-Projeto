@@ -2,9 +2,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { ScrollView, StyleSheet, Text, View, Pressable } from 'react-native';
 
 import { palette } from '@/constants/palette';
+import { useProximasAulas } from '@/features/agenda/use-proximas-aulas';
+import { useProximasAtividades } from '@/features/atividades/use-proximas-atividades';
 import { SummaryCard } from '@/features/financeiro/components/summary-card';
 
 export default function InicioScreen() {
+    const { aulas, carregando } = useProximasAulas(3);
+    const {
+        atividades,
+        carregando: carregandoAtividades,
+        erro: erroAtividades,
+    } = useProximasAtividades(3);
+
     return (
         <ScrollView style={styles.container} contentContainerStyle={styles.conteudo}>
 
@@ -39,56 +48,57 @@ export default function InicioScreen() {
                     </View>
                 </View>
 
-                {/* Seção: Próximas Aulas */}
+                {/* Seção: Próximas Aulas (vem da agenda) */}
                 <View style={styles.sectionContainer}>
                     <Text style={styles.sectionTitle}>Próximas Aulas</Text>
 
-                    <View style={styles.cardItem}>
-                        <View style={styles.indicatorBarBlue} />
-                        <View style={styles.iconBoxBlue}>
-                            <Ionicons name="school" size={20} color="#0288D1" />
-                        </View>
-                        <View style={styles.itemInfo}>
-                            <Text style={styles.itemTitle}>Aula Espanhol 03</Text>
-                            <Text style={styles.itemSubtitle}>Nome do Aluno</Text>
-                            <Text style={styles.itemTime}>22/09 ás 15:00</Text>
-                        </View>
-                        <View style={styles.badgeIcon}>
-                            <Ionicons name="bulb-outline" size={16} color="#D32F2F" />
-                        </View>
-                    </View>
+                    {!carregando && aulas.length === 0 && (
+                        <Text style={styles.vazio}>Nenhuma aula agendada.</Text>
+                    )}
 
-                    <View style={styles.cardItem}>
-                        <View style={styles.indicatorBarBlue} />
-                        <View style={styles.iconBoxBlue}>
-                            <Ionicons name="school" size={20} color="#0288D1" />
+                    {aulas.map((aula) => (
+                        <View key={aula.id} style={styles.cardItem}>
+                            <View style={styles.indicatorBarBlue} />
+                            <View style={styles.iconBoxBlue}>
+                                <Ionicons name="school" size={20} color="#0288D1" />
+                            </View>
+                            <View style={styles.itemInfo}>
+                                <Text style={styles.itemTitle} numberOfLines={1}>{aula.titulo}</Text>
+                                <Text style={styles.itemSubtitle} numberOfLines={1}>{aula.aluno}</Text>
+                                <Text style={styles.itemTime}>{aula.quando}</Text>
+                            </View>
+                            <View style={styles.badgeIcon}>
+                                <Ionicons name="bulb-outline" size={16} color="#D32F2F" />
+                            </View>
                         </View>
-                        <View style={styles.itemInfo}>
-                            <Text style={styles.itemTitle}>Aula Espanhol 03</Text>
-                            <Text style={styles.itemSubtitle}>Nome do Aluno</Text>
-                            <Text style={styles.itemTime}>22/09 ás 15:00</Text>
-                        </View>
-                        <View style={styles.badgeIcon}>
-                            <Ionicons name="bulb-outline" size={16} color="#D32F2F" />
-                        </View>
-                    </View>
+                    ))}
                 </View>
 
-                {/* Seção: Próximas Atividades */}
+                {/* Seção: Próximas Atividades (vem do mural de atividades) */}
                 <View style={styles.sectionContainer}>
                     <Text style={styles.sectionTitle}>Próximas Atividades</Text>
 
-                    <View style={styles.cardItem}>
-                        <View style={styles.indicatorBarPurple} />
-                        <View style={styles.iconBoxPurple}>
-                            <Ionicons name="create-outline" size={20} color="#8E24AA" />
+                    {!carregandoAtividades && erroAtividades && (
+                        <Text style={styles.vazio}>Não foi possível carregar as atividades.</Text>
+                    )}
+
+                    {!carregandoAtividades && !erroAtividades && atividades.length === 0 && (
+                        <Text style={styles.vazio}>Nenhuma atividade próxima.</Text>
+                    )}
+
+                    {atividades.map((atividade) => (
+                        <View key={atividade.id} style={styles.cardItem}>
+                            <View style={styles.indicatorBarPurple} />
+                            <View style={styles.iconBoxPurple}>
+                                <Ionicons name="create-outline" size={20} color="#8E24AA" />
+                            </View>
+                            <View style={styles.itemInfo}>
+                                <Text style={styles.itemTitle} numberOfLines={1}>{atividade.titulo}</Text>
+                                <Text style={styles.itemSubtitle} numberOfLines={1}>{atividade.aluno}</Text>
+                                <Text style={styles.itemTime}>{atividade.quando}</Text>
+                            </View>
                         </View>
-                        <View style={styles.itemInfo}>
-                            <Text style={styles.itemTitle}>Atividade Espanhol 03</Text>
-                            <Text style={styles.itemSubtitle}>Nome do Aluno</Text>
-                            <Text style={styles.itemTime}>22/09 ás 15:00</Text>
-                        </View>
-                    </View>
+                    ))}
                 </View>
 
             </View>
@@ -123,6 +133,7 @@ const styles = StyleSheet.create({
     sectionContainer: { gap: 12 },
     sectionTitle: { fontSize: 15, fontWeight: '700', color: palette.title },
     cardsRow: { flexDirection: 'row', gap: 12 },
+    vazio: { fontSize: 12, color: palette.textMuted },
 
     /* Cards de Listagem (Aulas e Atividades) */
     cardItem: {

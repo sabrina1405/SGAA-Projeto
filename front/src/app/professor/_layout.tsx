@@ -54,6 +54,9 @@ export default function ProfessorLayout() {
 
         {/* Rota que existe, mas não deve aparecer como aba */}
         <Tabs.Screen name="comprovante" options={{ href: null }} />
+        <Tabs.Screen name="atividades" options={{ href: null }} />
+        <Tabs.Screen name="recados" options={{ href: null }} />
+        <Tabs.Screen name="arquivos" options={{ href: null }} />
       </Tabs>
     </MenuProvider>
   );

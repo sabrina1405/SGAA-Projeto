@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { palette } from '@/constants/palette';
@@ -7,20 +7,34 @@ import { AgendaItem } from '@/features/agenda/components/agenda-item';
 import { CalendarGrid } from '@/features/agenda/components/calendar-grid';
 import { MonthHeader } from '@/features/agenda/components/month-header';
 import { StatusFilter } from '@/features/agenda/components/status-filter';
-import { EVENTOS_MOCK } from '@/features/agenda/mock';
+import { useAulas } from '@/features/agenda/use-aulas';
 import type { FiltroStatus } from '@/features/agenda/types';
 import { MESES, agruparPorData, chaveData, rotuloDia } from '@/features/agenda/utils';
 
+import { useLocalSearchParams, useRouter } from 'expo-router';
+
 export default function AgendaScreen() {
+  const router = useRouter();
   const agora = new Date();
   const hoje = chaveData(agora.getFullYear(), agora.getMonth(), agora.getDate());
+
+  // 'YYYY-MM-DD' enviado pela tela "novo" para abrir a agenda no dia da aula criada
+  const { data } = useLocalSearchParams<{ data?: string }>();
 
   const [ano, setAno] = useState(agora.getFullYear());
   const [mes, setMes] = useState(agora.getMonth());
   const [selecionada, setSelecionada] = useState(hoje);
   const [filtro, setFiltro] = useState<FiltroStatus>('todos');
 
-  const eventos = EVENTOS_MOCK;
+  const { eventos, carregando, erro } = useAulas(ano, mes);
+
+  useEffect(() => {
+    if (!data) return;
+    const [a, m] = data.split('-').map(Number);
+    setAno(a);
+    setMes(m - 1);
+    setSelecionada(data);
+  }, [data]);
 
   const eventosPorData = useMemo(() => {
     const filtrados = filtro === 'todos' ? eventos : eventos.filter((e) => e.status === filtro);
@@ -72,8 +86,7 @@ export default function AgendaScreen() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Novo item"
-        // TODO: router.push('/professor/agenda/novo') quando a tela existir
-        onPress={() => {}}
+        onPress={() => router.push('/professor/agenda/novo')}
         style={({ pressed }) => [styles.fab, pressed && styles.pressionado]}
       >
         <Ionicons name="add" size={28} color="#fff" />

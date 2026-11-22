@@ -1,35 +1,57 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, Pressable, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { Fontisto, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 
 import { login, mensagemDeErro } from '@/features/auth/authService';
-import { palette } from '@/constants/palette';
-
 import { useSessao } from '@/features/auth/SessaoContext';
+
+type Perfil = 'aluno' | 'professor';
+type CampoFoco = 'email' | 'senha' | null;
+
+const webNoOutline =
+  Platform.OS === 'web'
+    ? ({ outlineStyle: 'none', outlineWidth: 0 } as object)
+    : undefined;
 
 export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
+  const [perfil, setPerfil] = useState<Perfil>('professor');
+  const [focoCampo, setFocoCampo] = useState<CampoFoco>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState('');
-
-  const { iniciarSessao } = useSessao();
+  const { iniciarSessao, encerrarSessao } = useSessao();
 
   async function entrar() {
     if (!email.trim() || !senha) {
       setErro('Informe o e-mail e a senha.');
       return;
     }
+
     setErro('');
     setCarregando(true);
     try {
       const usuario = await login({ email, senha });
+      if (usuario.tipo !== perfil) {
+        await encerrarSessao();
+        setErro(`Esta conta não é de ${perfil}. Selecione o perfil correspondente.`);
+        return;
+      }
       iniciarSessao(usuario);
-      router.replace('/professor/inicio');
+      router.replace(usuario.tipo === 'aluno' ? '/aluno/home' : '/professor/inicio');
     } catch (e) {
       setErro(mensagemDeErro(e));
     } finally {
@@ -37,263 +59,270 @@ export default function LoginScreen() {
     }
   }
 
-    return (
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
+    >
+      <LinearGradient
+        colors={['#3B0764', '#6B21A8', '#8B5CF6']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.background}
       >
-        {/* Fundo com Gradiente Moderno */}
-        <LinearGradient
-          colors={['#4A148C', '#3F2B96', '#1A237E']}
-          style={styles.gradientBackground}
-        >
-          <View style={styles.conteudo}>
+        <View style={styles.content}>
+          {/* Logo e Cabeçalho */}
+          <View style={styles.header}>
+            <View style={styles.logo}>
+              <Text style={styles.logoText}>SGAA</Text>
+            </View>
+            <Text style={styles.title}>Bem-vindo!</Text>
+            <Text style={styles.subtitle}>
+              Sistema de Gerenciamento de Aulas e Agendamentos
+            </Text>
+          </View>
 
-            {/* Logo e Título */}
-            <View style={styles.logoContainer}>
-              <View style={styles.logoBox}>
-                <Ionicons name="school" size={32} color={palette.header} />
-              </View>
-              <Text style={styles.appTitle}>SGAA</Text>
-              <Text style={styles.appSubtitle}>Sistema de Gerenciamento de Aulas e Agendamentos</Text>
+          {/* Seletor de Perfil */}
+          <View style={styles.roleButtonsContainer}>
+            {(['aluno', 'professor'] as const).map((opcao) => {
+              const selecionado = perfil === opcao;
+              return (
+                <Pressable
+                  key={opcao}
+                  style={[
+                    styles.roleButton,
+                    selecionado ? styles.roleButtonSelected : styles.roleButtonUnselected,
+                    webNoOutline,
+                  ]}
+                  onPress={() => {
+                    setPerfil(opcao);
+                    setErro('');
+                  }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: selecionado }}
+                >
+                  <Ionicons
+                    name={opcao === 'aluno' ? 'school' : 'person'}
+                    size={22}
+                    color={selecionado ? '#6B21A8' : '#D8B4FE'}
+                  />
+                  <Text
+                    style={[
+                      styles.roleButtonTitle,
+                      selecionado ? styles.roleButtonTitleSelected : styles.roleButtonTitleUnselected,
+                    ]}
+                  >
+                    {opcao === 'aluno' ? 'Aluno' : 'Professor'}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.roleButtonSubtitle,
+                      selecionado ? styles.roleButtonSubtitleSelected : styles.roleButtonSubtitleUnselected,
+                    ]}
+                  >
+                    Acessar minha área
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* Inputs de Credencial */}
+          <View style={styles.formContainer}>
+            <View
+              style={[
+                styles.inputContainer,
+                focoCampo === 'email' && styles.inputContainerFocused,
+              ]}
+            >
+              <Fontisto
+                name="email"
+                size={18}
+                color={focoCampo === 'email' ? '#6B21A8' : '#9CA3AF'}
+              />
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                onFocus={() => setFocoCampo('email')}
+                onBlur={() => setFocoCampo(null)}
+                placeholder="E-mail"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                underlineColorAndroid="transparent"
+                style={[styles.input, webNoOutline]}
+              />
             </View>
 
-            {/* Botão de Atalho: Acessar Área do Aluno */}
-            <Pressable
-              style={({ pressed }) => [styles.btnAreaAluno, pressed && styles.pressionado]}
-              onPress={() => { }}
+            <View
+              style={[
+                styles.inputContainer,
+                focoCampo === 'senha' && styles.inputContainerFocused,
+              ]}
             >
-              <Ionicons name="person-outline" size={18} color="#FFFFFF" />
-              <Text style={styles.btnAreaAlunoTexto}>Acessar Área do Aluno</Text>
+              <Ionicons
+                name="lock-closed-outline"
+                size={20}
+                color={focoCampo === 'senha' ? '#6B21A8' : '#9CA3AF'}
+              />
+              <TextInput
+                value={senha}
+                onChangeText={setSenha}
+                onFocus={() => setFocoCampo('senha')}
+                onBlur={() => setFocoCampo(null)}
+                placeholder="Senha"
+                placeholderTextColor="#9CA3AF"
+                secureTextEntry={!mostrarSenha}
+                underlineColorAndroid="transparent"
+                style={[styles.input, webNoOutline]}
+              />
+              <View style={styles.separator} />
+              <Pressable
+                onPress={() => setMostrarSenha(!mostrarSenha)}
+                accessibilityRole="button"
+                hitSlop={10}
+                style={webNoOutline}
+              >
+                <Ionicons
+                  name={mostrarSenha ? 'eye-outline' : 'eye-off-outline'}
+                  size={20}
+                  color="#9CA3AF"
+                />
+              </Pressable>
+            </View>
+
+            {erro ? <Text style={styles.erroTexto}>{erro}</Text> : null}
+
+            <Pressable
+              style={[styles.recoverContainer, webNoOutline]}
+              onPress={() => router.push('/recuperar-senha')}
+            >
+              <Text style={styles.recover}>Esqueceu a senha?</Text>
             </Pressable>
 
-            <View style={styles.divisorContainer}>
-              <View style={styles.linhaDivisora} />
-              <Text style={styles.divisorTexto}>ou entre como professor</Text>
-              <View style={styles.linhaDivisora} />
-            </View>
-
-            {/* Formulário de Login (E-mail e Senha) */}
-            <View style={styles.formContainer}>
-
-              {/* Input de E-mail */}
-              <View style={styles.inputWrapper}>
-                <Ionicons name="mail-outline" size={20} color={palette.textMuted} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="E-mail profissional"
-                  placeholderTextColor="#9CA3AF"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-              </View>
-
-              {/* Input de Senha */}
-              <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={20} color={palette.textMuted} style={styles.inputIcon} />
-                <TextInput
-                  style={[styles.input, { flex: 1 }]}
-                  placeholder="Sua senha"
-                  placeholderTextColor="#9CA3AF"
-                  value={senha}
-                  onChangeText={setSenha}
-                  secureTextEntry={!mostrarSenha}
-                />
-                <Pressable onPress={() => setMostrarSenha(!mostrarSenha)} style={styles.eyeIcon}>
-                  <Ionicons
-                    name={mostrarSenha ? "eye-off-outline" : "eye-outline"}
-                    size={20}
-                    color={palette.textMuted}
-                  />
-                </Pressable>
-              </View>
-
-              {/* Link Recuperar Senha */}
-              <Pressable onPress={() => { }} style={styles.recuperarSenhaContainer}>
-                <Text style={styles.recuperarSenhaTexto}>Esqueceu sua senha?</Text>
-              </Pressable>
-
-              {/* Mensagem de erro */}
-              {erro ? <Text style={styles.erroTexto}>{erro}</Text> : null}
-
-              {/* Botão Entrar */}
-              <Pressable
-                style={({ pressed }) => [styles.btnEntrar, pressed && styles.pressionado]}
-                onPress={entrar}
-                disabled={carregando}
+            {/* Botão Principal */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.loginButtonContainer,
+                webNoOutline,
+                pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
+              ]}
+              onPress={entrar}
+              disabled={carregando}
+            >
+              <LinearGradient
+                colors={['#A855F7', '#7E22CE']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.loginButton}
               >
                 {carregando ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <>
-                    <Text style={styles.btnEntrarTexto}>Entrar no Sistema</Text>
-                    <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
-                  </>
+                  <Text style={styles.loginText}>Entrar</Text>
                 )}
-              </Pressable>
-
-            </View>
-
+              </LinearGradient>
+            </Pressable>
           </View>
-        </LinearGradient>
-      </KeyboardAvoidingView>
-    );
-  }
+        </View>
+      </LinearGradient>
+    </KeyboardAvoidingView>
+  );
+}
 
-  const styles = StyleSheet.create({
-    container: { flex: 1 },
-    gradientBackground: { flex: 1 },
-    conteudo: {
-      flex: 1,
-      padding: 24,
-      justifyContent: 'center',
-      alignItems: 'center',
-      maxWidth: 400,
-      width: '100%',
-      alignSelf: 'center',
-    },
-
-    /* Logo e Título */
-    logoContainer: {
-      alignItems: 'center',
-      marginBottom: 24,
-    },
-    logoBox: {
-      width: 68,
-      height: 68,
-      backgroundColor: '#FFFFFF',
-      borderRadius: 16,
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginBottom: 12,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.15,
-      shadowRadius: 8,
-      elevation: 4,
-    },
-    appTitle: {
-      fontSize: 28,
-      fontWeight: '800',
-      color: '#FFFFFF',
-      letterSpacing: 1.5,
-    },
-    appSubtitle: {
-      fontSize: 12,
-      color: 'rgba(255, 255, 255, 0.75)',
-      textAlign: 'center',
-      marginTop: 4,
-    },
-
-    /* Botão Grande Área do Aluno */
-    btnAreaAluno: {
-      width: '100%',
-      height: 52,
-      backgroundColor: 'rgba(255, 255, 255, 0.15)',
-      borderRadius: 14,
-      flexDirection: 'row',
-      justifyContent: 'center',
-      alignItems: 'center',
-      gap: 8,
-      borderWidth: 1,
-      borderColor: 'rgba(255, 255, 255, 0.25)',
-      marginBottom: 20,
-    },
-    btnAreaAlunoTexto: {
-      color: '#FFFFFF',
-      fontSize: 14,
-      fontWeight: '600',
-    },
-
-    /* Divisor */
-    divisorContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      width: '100%',
-      marginBottom: 20,
-      gap: 10,
-    },
-    linhaDivisora: {
-      flex: 1,
-      height: 1,
-      backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    },
-    divisorTexto: {
-      color: 'rgba(255, 255, 255, 0.6)',
-      fontSize: 11,
-      fontWeight: '500',
-    },
-
-    /* Formulário */
-    formContainer: {
-      width: '100%',
-      gap: 14,
-    },
-    inputWrapper: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: '#FFFFFF',
-      borderRadius: 14,
-      paddingHorizontal: 16,
-      height: 52,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.08,
-      shadowRadius: 4,
-      elevation: 2,
-    },
-    inputIcon: {
-      marginRight: 12,
-    },
-    input: {
-      flex: 1,
-      fontSize: 14,
-      color: '#1F2937',
-    },
-    eyeIcon: {
-      padding: 4,
-    },
-    recuperarSenhaContainer: {
-      alignItems: 'flex-end',
-      marginTop: 2,
-      marginBottom: 6,
-    },
-    recuperarSenhaTexto: {
-      color: 'rgba(255, 255, 255, 0.85)',
-      fontSize: 12,
-      fontWeight: '500',
-    },
-
-    /* Mensagem de erro */
-    erroTexto: {
-      color: '#FECACA',
-      fontSize: 12,
-      textAlign: 'center',
-    },
-
-    /* Botão Entrar */
-    btnEntrar: {
-      width: '100%',
-      height: 52,
-      backgroundColor: '#10B981', // Verde moderno e vibrante
-      borderRadius: 14,
-      flexDirection: 'row',
-      justifyContent: 'center',
-      alignItems: 'center',
-      gap: 8,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.2,
-      shadowRadius: 6,
-      elevation: 3,
-    },
-    btnEntrarTexto: {
-      color: '#FFFFFF',
-      fontSize: 14,
-      fontWeight: '700',
-    },
-
-    pressionado: { opacity: 0.85, transform: [{ scale: 0.99 }] },
-  });
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  background: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
+  content: { width: '100%', maxWidth: 400, alignSelf: 'center' },
+  header: { alignItems: 'center', marginBottom: 24 },
+  logo: {
+    width: 72,
+    height: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  logoText: { color: '#6B21A8', fontSize: 20, fontWeight: '900', letterSpacing: 1 },
+  title: { color: '#FFFFFF', fontSize: 24, fontWeight: '700', marginBottom: 4 },
+  subtitle: {
+    color: '#E9D5FF',
+    fontSize: 13,
+    fontWeight: '400',
+    textAlign: 'center',
+    paddingHorizontal: 12,
+  },
+  roleButtonsContainer: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  roleButton: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  roleButtonSelected: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  roleButtonUnselected: {
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  roleButtonTitle: { fontSize: 15, fontWeight: '700' },
+  roleButtonTitleSelected: { color: '#6B21A8' },
+  roleButtonTitleUnselected: { color: '#FFFFFF' },
+  roleButtonSubtitle: { fontSize: 11 },
+  roleButtonSubtitleSelected: { color: '#7E22CE' },
+  roleButtonSubtitleUnselected: { color: '#E9D5FF' },
+  formContainer: { width: '100%' },
+  inputContainer: {
+    height: 52,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginTop: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  inputContainerFocused: {
+    borderColor: '#C084FC',
+  },
+  input: { flex: 1, marginLeft: 12, color: '#1F2937', fontSize: 15, fontWeight: '500' },
+  separator: { width: 1, height: 20, backgroundColor: '#E5E7EB', marginHorizontal: 8 },
+  erroTexto: { color: '#FCA5A5', fontSize: 13, textAlign: 'center', marginTop: 12, fontWeight: '500' },
+  recoverContainer: { alignItems: 'flex-end', marginTop: 12, marginBottom: 20 },
+  recover: { color: '#E9D5FF', fontSize: 13, fontWeight: '500' },
+  loginButtonContainer: { width: '100%' },
+  loginButton: {
+    height: 52,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#7E22CE',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  loginText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+});
