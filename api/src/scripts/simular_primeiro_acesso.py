@@ -8,7 +8,7 @@ Apague este arquivo depois da apresentação.
 
 import random
 import sys
-from datetime import date, datetime
+from datetime import datetime
 from getpass import getpass
 
 from pydantic import TypeAdapter, ValidationError
@@ -53,7 +53,7 @@ def _telefone() -> str:
 
 def _concluir(sessao: Session, usuario: Usuario, senha: str) -> None:
     try:
-        nascimento = datetime.strptime(
+        nascimento = datetime.strptime(  # noqa: DTZ007
             input("Data de nascimento (DD/MM/AAAA): ").strip(), "%d/%m/%Y"
         ).date()
     except ValueError:
