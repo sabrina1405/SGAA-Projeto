@@ -20,6 +20,24 @@ export async function usuarioAtual(): Promise<Usuario> {
   return data.dados;
 }
 
+export async function solicitarRecuperacaoSenha(email: string): Promise<void> {
+  await api.post<Resposta<null>>('/auth/esqueci-senha', {
+    email: email.trim(),
+  });
+}
+
+export async function redefinirSenha(
+  email: string,
+  codigo: string,
+  novaSenha: string,
+): Promise<void> {
+  await api.post<Resposta<null>>('/auth/redefinir-senha', {
+    email: email.trim(),
+    codigo,
+    nova_senha: novaSenha,
+  });
+}
+
 // Converte o erro do Axios em uma mensagem para mostrar na tela.
 export function mensagemDeErro(erro: unknown): string {
   if (axios.isAxiosError(erro)) {
