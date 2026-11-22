@@ -11,9 +11,17 @@ from src.models.atividade import (
 )
 from src.models.aula import Aula, AulaAluno, AulaGrupo, StatusAula, StatusParticipacao
 from src.models.codigo_verificacao import CodigoVerificacao
+from src.models.financeiro import (
+    Cobranca,
+    FrequenciaPlano,
+    PlanoCobranca,
+    StatusCobranca,
+)
 from src.models.grupo import Grupo, GrupoAluno
+from src.models.material import AnexoPasta, Pasta, PastaAluno, PastaGrupo
 from src.models.notificacao import (
     Dispositivo,
+    EnvioEmail,
     EnvioPush,
     Notificacao,
     StatusEnvio,
@@ -27,6 +35,7 @@ __all__ = [
     "Aluno",
     "AnexoAtividade",
     "AnexoEntrega",
+    "AnexoPasta",
     "Arquivo",
     "Atividade",
     "AtividadeAluno",
@@ -34,13 +43,20 @@ __all__ = [
     "Aula",
     "AulaAluno",
     "AulaGrupo",
+    "Cobranca",
     "CodigoVerificacao",
     "Dispositivo",
     "EntregaAtividade",
+    "EnvioEmail",
     "EnvioPush",
+    "FrequenciaPlano",
     "Grupo",
     "GrupoAluno",
     "Notificacao",
+    "Pasta",
+    "PastaAluno",
+    "PastaGrupo",
+    "PlanoCobranca",
     "Professor",
     "Recado",
     "RecadoAluno",
@@ -48,6 +64,7 @@ __all__ = [
     "RecadoGrupo",
     "StatusArquivo",
     "StatusAula",
+    "StatusCobranca",
     "StatusEntrega",
     "StatusEnvio",
     "StatusParticipacao",

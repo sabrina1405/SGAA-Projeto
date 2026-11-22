@@ -264,10 +264,69 @@ def test_confirmado_sem_vinculo_sai_em_24_horas(
 def test_limite_por_execucao(client, professor, drive, sessao, monkeypatch):
     for _ in range(3):
         _sessao(client, professor)
-    _daqui_a(monkeypatch, hours=2)
+    _daqui_a(monkeypatch, days=8)
     assert arquivo_service.limpar(sessao, drive, limite=2) == 2
     assert arquivo_service.limpar(sessao, drive, limite=2) == 1
     assert arquivo_service.limpar(sessao, drive, limite=2) == 0
+
+
+def test_descartado_sem_conteudo_continua_no_limite(client, professor):
+    for _ in range(arquivo_service.MAXIMO_SEM_VINCULO_POR_USUARIO):
+        arquivo_id = _sessao(client, professor)
+        client.delete(f"{ROTA}/{arquivo_id}", headers=cabecalho(professor))
+    # A URL de cada sessão descartada ainda aceita o envio.
+    assert _abrir(client, professor).status_code == 409
+
+
+def test_descartado_sem_conteudo_sai_do_limite_quando_a_sessao_expira(
+    client, professor, monkeypatch
+):
+    for _ in range(arquivo_service.MAXIMO_SEM_VINCULO_POR_USUARIO):
+        arquivo_id = _sessao(client, professor)
+        client.delete(f"{ROTA}/{arquivo_id}", headers=cabecalho(professor))
+    _daqui_a(monkeypatch, days=8)
+    assert _abrir(client, professor).status_code == 201
+
+
+def test_envio_depois_da_limpeza_ainda_e_apagado(
+    client, professor, drive, sessao, monkeypatch
+):
+    arquivo_id = _sessao(client, professor)
+    client.delete(f"{ROTA}/{arquivo_id}", headers=cabecalho(professor))
+    assert arquivo_service.limpar(sessao, drive) == 0
+    assert _arquivo(sessao, arquivo_id).deletado_em is None
+
+    # O app envia pela URL da sessão depois do descarte.
+    drive_file_id = drive.receber(arquivo_id)
+    assert arquivo_service.limpar(sessao, drive) == 1
+    assert drive.apagados == [drive_file_id]
+    assert _arquivo(sessao, arquivo_id).deletado_em is not None
+
+
+def test_sem_conteudo_e_encerrado_quando_a_sessao_expira(
+    client, professor, drive, sessao, monkeypatch
+):
+    arquivo_id = _sessao(client, professor)
+    _daqui_a(monkeypatch, hours=2)
+    assert arquivo_service.limpar(sessao, drive) == 0
+    assert _arquivo(sessao, arquivo_id).deletado_em is None
+    _daqui_a(monkeypatch, days=8)
+    assert arquivo_service.limpar(sessao, drive) == 1
+    assert _arquivo(sessao, arquivo_id).deletado_em is not None
+
+
+def test_adiados_nao_tomam_as_vagas_da_execucao(
+    client, professor, drive, sessao, monkeypatch
+):
+    for _ in range(2):
+        _sessao(client, professor)
+    drive_file_id = drive.receber(_sessao(client, professor))
+    _daqui_a(monkeypatch, hours=2)
+    # Os dois primeiros ainda não têm conteúdo e ficam para depois.
+    assert arquivo_service.limpar(sessao, drive, limite=2) == 0
+    # Na execução seguinte, eles vão para o fim e o terceiro é apagado.
+    assert arquivo_service.limpar(sessao, drive, limite=2) == 1
+    assert drive.apagados == [drive_file_id]
 
 
 def test_para_na_primeira_falha(client, professor, drive, sessao, monkeypatch):

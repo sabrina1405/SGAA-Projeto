@@ -746,7 +746,7 @@ def salvar_entrega(
         )
     if entrega is None:
         # Dois toques em "Enviar" ao mesmo tempo não criam duas entregas.
-        sessao.execute(
+        inserida = sessao.execute(
             insert(EntregaAtividade)
             .values(
                 atividade_id=atividade.id,
@@ -760,7 +760,12 @@ def salvar_entrega(
                 enviada_em=momento,
             )
             .on_conflict_do_nothing(constraint="uq_entrega_atividade_atividade_aluno")
-        )
+            .returning(EntregaAtividade.id)
+        ).scalar_one_or_none()
+        if inserida is None and vencida:
+            # Outra requisição entregou antes: depois do prazo não se edita.
+            sessao.rollback()
+            raise EntregaEncerrada
         entrega = _entrega_do_aluno(sessao, atividade.id, aluno.id)
     entrega.resposta = resposta
     entrega.enviada_em = momento

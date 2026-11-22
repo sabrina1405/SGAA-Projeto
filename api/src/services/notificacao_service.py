@@ -1,4 +1,4 @@
-"""Fila de notificações push.
+"""Fila de notificações push (e, quando o resolvedor pede, e-mail).
 
 Cada feature enfileira com `agendar` na própria transação e fornece um
 resolvedor, que monta a mensagem e os destinatários na hora do envio. O
@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from src.core.database import obter_engine
 from src.core.drive import obter_drive
+from src.core.email import EnviadorEmail, obter_enviador_email
 from src.core.push import (
     DISPOSITIVO_NAO_REGISTRADO,
     MENSAGENS_POR_ENVIO,
@@ -29,11 +30,13 @@ from src.core.push import (
 from src.core.security import agora
 from src.models.notificacao import (
     Dispositivo,
+    EnvioEmail,
     EnvioPush,
     Notificacao,
     StatusEnvio,
     TipoNotificacao,
 )
+from src.models.usuario import Usuario
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +54,14 @@ class Conteudo:
     corpo: str
     # Vai para o app junto com a notificação, para abrir a tela certa.
     dados: dict[str, Any] = field(default_factory=dict)
+    # Também por e-mail: o título vira o assunto, e o corpo do e-mail, quando
+    # informado, substitui o do push.
+    email: bool = False
+    corpo_email: str | None = None
+
+
+class FalhaEmail(Exception):
+    """O servidor de e-mail recusou ou não respondeu."""
 
 
 Resolvedor = Callable[[Session, int], Conteudo | None]
@@ -58,12 +69,18 @@ Resolvedor = Callable[[Session, int], Conteudo | None]
 
 def _resolvedores() -> dict[TipoNotificacao, Resolvedor]:
     # Import local: os services das features importam este módulo para agendar.
-    from src.services import atividade_service, aula_service, recado_service
+    from src.services import (
+        atividade_service,
+        aula_service,
+        financeiro_service,
+        recado_service,
+    )
 
     return {
         TipoNotificacao.RECADO: recado_service.conteudo_da_notificacao,
         **aula_service.RESOLVEDORES,
         **atividade_service.RESOLVEDORES,
+        **financeiro_service.RESOLVEDORES,
     }
 
 
@@ -147,10 +164,50 @@ def _registro_do_envio(
     )
 
 
-def _enviar(sessao: Session, enviador: EnviadorPush, notificacao: Notificacao) -> None:
+def _enviar_emails(
+    sessao: Session,
+    enviador_email: EnviadorEmail,
+    notificacao: Notificacao,
+    conteudo: Conteudo,
+) -> None:
+    """Um e-mail por destinatário ativo, registrado logo depois de sair: numa
+    nova tentativa, quem já recebeu não recebe de novo."""
+    ja_enviados = select(EnvioEmail.usuario_id).where(
+        EnvioEmail.notificacao_id == notificacao.id
+    )
+    usuarios = sessao.execute(
+        select(Usuario.id, Usuario.email)
+        .where(
+            Usuario.id.in_(conteudo.usuario_ids),
+            Usuario.deletado_em.is_(None),
+            Usuario.id.not_in(ja_enviados),
+        )
+        .order_by(Usuario.id)
+    ).all()
+    for usuario_id, email in usuarios:
+        try:
+            enviador_email.enviar(
+                email, conteudo.titulo, conteudo.corpo_email or conteudo.corpo
+            )
+        except Exception as erro:
+            raise FalhaEmail(str(erro)) from erro
+        sessao.add(EnvioEmail(notificacao_id=notificacao.id, usuario_id=usuario_id))
+        sessao.flush()
+
+
+def _enviar(
+    sessao: Session,
+    enviador: EnviadorPush,
+    notificacao: Notificacao,
+    enviador_email: EnviadorEmail | None = None,
+) -> None:
     conteudo = _resolvedores()[TipoNotificacao(notificacao.tipo)](
         sessao, notificacao.referencia_id
     )
+    if conteudo is not None and conteudo.usuario_ids and conteudo.email:
+        _enviar_emails(
+            sessao, enviador_email or obter_enviador_email(), notificacao, conteudo
+        )
     if conteudo is not None and conteudo.usuario_ids:
         ja_enviados = select(EnvioPush.dispositivo_id).where(
             EnvioPush.notificacao_id == notificacao.id
@@ -194,14 +251,17 @@ def _proxima_tentativa(tentativas: int) -> datetime:
 
 
 def _processar(
-    sessao: Session, enviador: EnviadorPush, notificacao: Notificacao
+    sessao: Session,
+    enviador: EnviadorPush,
+    notificacao: Notificacao,
+    enviador_email: EnviadorEmail | None = None,
 ) -> bool:
     """Envia em uma transação. Devolve se saiu da fila; a que falhou volta para
     uma nova tentativa."""
     try:
-        _enviar(sessao, enviador, notificacao)
-    except FalhaPush:
-        # Os lotes que já saíram ficam registrados.
+        _enviar(sessao, enviador, notificacao, enviador_email)
+    except (FalhaPush, FalhaEmail):
+        # Os lotes e os e-mails que já saíram ficam registrados.
         logger.exception("Falha ao enviar a notificação %s", notificacao.id)
         notificacao.tentativas += 1
         notificacao.enviar_em = _proxima_tentativa(notificacao.tentativas)
@@ -224,7 +284,11 @@ def _processar(
 
 
 def processar_pendentes(
-    sessao: Session, enviador: EnviadorPush, *, limite: int = 50
+    sessao: Session,
+    enviador: EnviadorPush,
+    *,
+    limite: int = 50,
+    enviador_email: EnviadorEmail | None = None,
 ) -> int:
     """Envia as notificações vencidas, uma por transação. Devolve quantas saíram
     da fila."""
@@ -233,20 +297,23 @@ def processar_pendentes(
         notificacao = _proxima_pendente(sessao)
         if notificacao is None:
             break
-        if _processar(sessao, enviador, notificacao):
+        if _processar(sessao, enviador, notificacao, enviador_email):
             processadas += 1
     return processadas
 
 
 def enviar_sem_falhar(
-    sessao: Session, enviador: EnviadorPush, notificacao_id: int
+    sessao: Session,
+    enviador: EnviadorPush,
+    notificacao_id: int,
+    enviador_email: EnviadorEmail | None = None,
 ) -> None:
     """Envio logo após a requisição, só da notificação que ela criou: o resto da
     fila é da tarefa agendada. Um erro aqui também fica para ela."""
     try:
         notificacao = _proxima_pendente(sessao, notificacao_id)
         if notificacao is not None:
-            _processar(sessao, enviador, notificacao)
+            _processar(sessao, enviador, notificacao, enviador_email)
     except Exception:
         logger.exception("Falha no envio imediato da notificação %s", notificacao_id)
         sessao.rollback()
@@ -304,12 +371,16 @@ def executar_tarefa_agendada() -> dict[str, int]:
     """Ponto de entrada do agendador (EventBridge) e do script local."""
     # Import local: `arquivo_service` não depende da fila, mas os services das
     # features importam este módulo.
-    from src.services import arquivo_service
+    from src.services import arquivo_service, financeiro_service
 
     enviador = obter_enviador_push()
     with Session(obter_engine(), expire_on_commit=False) as sessao:
         return {
-            "enviadas": processar_pendentes(sessao, enviador),
+            # Antes do envio: os avisos das cobranças novas já entram na fila.
+            "cobrancas_geradas": financeiro_service.gerar_cobrancas_sem_falhar(sessao),
+            "enviadas": processar_pendentes(
+                sessao, enviador, enviador_email=obter_enviador_email()
+            ),
             "recibos_conferidos": conferir_recibos(sessao, enviador),
             # Por último: com o Drive fora do ar, só ela espera.
             "arquivos_removidos": arquivo_service.limpar_sem_falhar(

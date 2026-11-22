@@ -18,6 +18,7 @@ from src.core.security import (
 )
 from src.models.codigo_verificacao import CodigoVerificacao
 from src.models.usuario import Usuario
+from src.services import dispositivo_service
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +219,8 @@ def redefinir_senha(sessao: Session, email: str, codigo: str, nova_senha: str) -
 
     _consumir_codigo(sessao, usuario, codigo)
     definir_senha(usuario, nova_senha)
+    # Quem tinha a senha antiga pode ter registrado o próprio aparelho.
+    dispositivo_service.remover_todos(sessao, usuario)
     sessao.commit()
 
 

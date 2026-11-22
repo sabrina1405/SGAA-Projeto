@@ -1,10 +1,12 @@
 from datetime import timedelta
 
 import jwt
+from sqlalchemy import select
 
 from src.core.config import obter_config
 from src.core.security import agora, criar_token
 from src.models.codigo_verificacao import CodigoVerificacao
+from src.models.notificacao import Dispositivo
 from src.models.usuario import TipoUsuario
 from src.services import auth_service
 from tests.conftest import SENHA_PADRAO, cabecalho
@@ -219,6 +221,29 @@ def test_recuperacao_de_senha_fluxo_completo(client, aluno, enviador):
     assert _login(client, aluno.email).status_code == 401
     assert _login(client, aluno.email, "Nova-Senha-456").status_code == 200
     assert client.get("/v1/auth/me", headers=token_antigo).status_code == 401
+
+
+def test_recuperacao_de_senha_remove_os_dispositivos(client, aluno, enviador, sessao):
+    token = "ExponentPushToken[intruso]"
+    resposta = client.post(
+        "/v1/dispositivos", json={"token": token}, headers=cabecalho(aluno)
+    )
+    assert resposta.status_code == 200
+
+    client.post("/v1/auth/esqueci-senha", json={"email": aluno.email})
+    resposta = client.post(
+        "/v1/auth/redefinir-senha",
+        json={
+            "email": aluno.email,
+            "codigo": enviador.ultimo_codigo(),
+            "nova_senha": "Nova-Senha-456",
+        },
+    )
+    assert resposta.status_code == 200
+
+    sessao.expire_all()
+    dispositivo = sessao.scalar(select(Dispositivo).where(Dispositivo.token == token))
+    assert dispositivo.deletado_em is not None
 
 
 def test_esqueci_senha_nao_revela_se_o_email_existe(client, aluno, enviador):

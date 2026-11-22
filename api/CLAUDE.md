@@ -22,6 +22,15 @@ Comandos executados dentro de `api/`.
    - o status esperado de cada exemplo.
 
    Não incluir os corpos das respostas. Os endpoints sem parâmetros e sem corpo são apenas citados. O status de cada exemplo deve ser conferido com uma chamada real à API, por exemplo via `TestClient` contra o banco de testes.
+6. Quando for dito "vou abrir o PR", responder com o título e a descrição prontos para colar, montados a partir dos commits da branch em relação à `develop` (`git log develop..HEAD`):
+   - **Título** em bloco de código, no padrão Conventional Commits em português (`feat(escopo): ...`, `fix(...)`, `chore(...)`).
+   - **Descrição** em bloco de código Markdown, com estas seções nesta ordem (omitir as que não se aplicam):
+     - `## O que muda`: parágrafo curto e, se houver, subseções por perfil ou área (por exemplo, Professora `/v1/...` e Aluno `/v1/...`) em tópicos;
+     - `## Regras`: regras de negócio e comportamentos que o revisor precisa conhecer;
+     - `## Banco`: migrações e como foram validadas (`upgrade`, `downgrade -1`, `upgrade`);
+     - `## Testes`: arquivos de teste novos, o que cobrem e o resultado real da suíte (número de testes, `ruff check` e `ruff format --check`). Sem ter rodado a suíte, dizer isso em vez de inventar números;
+     - `## Docs`: documentação atualizada;
+     - `## Fora do escopo`: o que ficou para depois.
 
 Se o `poetry` não estiver disponível no ambiente (por exemplo, dentro do ai-jail), criar um venv em `api/.venv` (já ignorado pelo git), instalar o `poetry` nele e usar os comandos normalmente:
 

@@ -28,6 +28,9 @@ TAMANHO_MAXIMO_ANOTACOES = 5000
 TAMANHO_MAXIMO_TEXTO_ATIVIDADE = 5000
 MAXIMO_ANEXOS_POR_ATIVIDADE = 5
 MAXIMO_ANEXOS_POR_ENTREGA = 3
+MAXIMO_ARQUIVOS_POR_CHAMADA = 20
+# R$ 100 mil: barra erro de digitação, como centavos digitados como reais.
+VALOR_MAXIMO_CENTAVOS = 10_000_000
 
 
 def _remover_espacos_das_pontas(valor: object) -> object:
@@ -304,6 +307,22 @@ NomeArquivo = Annotated[
     str,
     AfterValidator(_normalizar_nome),
     StringConstraints(min_length=1, max_length=150),
+]
+ValorCentavos = Annotated[int, Field(ge=1, le=VALOR_MAXIMO_CENTAVOS)]
+DescricaoCobranca = Annotated[
+    str,
+    AfterValidator(_normalizar_nome),
+    StringConstraints(min_length=1, max_length=100),
+]
+NomePasta = Annotated[
+    str,
+    AfterValidator(_normalizar_nome),
+    StringConstraints(min_length=1, max_length=80),
+]
+IdsDeArquivos = Annotated[
+    list[IdBanco],
+    Field(min_length=1, max_length=MAXIMO_ARQUIVOS_POR_CHAMADA),
+    AfterValidator(_sem_repeticao),
 ]
 DriveFileId = Annotated[
     str,

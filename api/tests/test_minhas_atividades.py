@@ -194,6 +194,29 @@ def test_entrega_atrasada(client, professor, aluno_maior, monkeypatch):
     assert _entregar(client, aluno_maior, atividade["id"]).status_code == 409
 
 
+def test_entrega_atrasada_simultanea_nao_sobrescreve(
+    client, professor, aluno_maior, monkeypatch
+):
+    atividade = _atividade(client, professor, vence_em=_quando(days=1))
+    _ir_para(monkeypatch, days=2)
+    assert _entregar(client, aluno_maior, atividade["id"]).status_code == 200
+
+    # A segunda requisição leu a atividade antes de a primeira gravar a entrega.
+    original = atividade_service.obter_minha_atividade
+
+    def sem_entrega(*args, **kwargs):
+        encontrada, destinatario, _ = original(*args, **kwargs)
+        return encontrada, destinatario, None
+
+    monkeypatch.setattr(atividade_service, "obter_minha_atividade", sem_entrega)
+    resposta = _entregar(client, aluno_maior, atividade["id"], resposta="Segunda")
+    assert resposta.status_code == 409
+    monkeypatch.undo()
+    _ir_para(monkeypatch, days=2)
+    detalhe = _detalhe(client, aluno_maior, atividade["id"]).json()["dados"]
+    assert detalhe["entrega"]["resposta"] != "Segunda"
+
+
 def test_entrega_atrasada_com_arquivo_em_uma_chamada(
     client, professor, aluno_maior, arquivo_confirmado, monkeypatch
 ):

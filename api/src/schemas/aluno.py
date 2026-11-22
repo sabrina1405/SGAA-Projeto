@@ -116,6 +116,8 @@ class AlunoDetalheResposta(BaseModel):
     primeiro_acesso_concluido: bool
     # Nulo enquanto o aluno não conclui o primeiro acesso.
     perfil: PerfilAlunoDados | None
-    # Reservados: sempre vazios até existirem os módulos de aulas e pagamentos.
+    # Reservado: sempre vazio até existir a visão de aulas por aluno.
     aulas: list[dict[str, Any]] = []
+    # Cobranças do aluno com a professora que consulta, do vencimento mais novo
+    # ao mais antigo, no formato de CobrancaResposta.
     pagamentos: list[dict[str, Any]] = []
