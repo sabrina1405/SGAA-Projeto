@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,6 +17,8 @@ import { useRouter } from 'expo-router';
 import { palette } from '@/constants/palette';
 import { USAR_MOCK, criarAula, mensagemDeErro } from '@/features/agenda/api';
 import { dataBRparaChave, paraISO } from '@/features/agenda/mappers';
+import { listarAlunos, mensagemDeErroAlunos } from '@/features/alunos/alunosService';
+import type { AlunoListaItem } from '@/features/alunos/types';
 
 // Formatadores visuais
 const formatarDataBR = (date: Date) => {
@@ -49,6 +52,12 @@ const lerIds = (texto: string) =>
     .map((s) => parseInt(s.trim(), 10))
     .filter((n) => Number.isInteger(n) && n > 0);
 
+// Busca sem diferenciar maiúsculas nem acentos
+const normalizar = (texto: string) =>
+  texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+const LIMITE_OPCOES = 6;
+
 export default function CriarAulaScreen() {
   const router = useRouter();
 
@@ -70,10 +79,53 @@ export default function CriarAulaScreen() {
   // Controle do picker no mobile
   const [tipoPickerAtivo, setTipoPickerAtivo] = useState<'data' | 'inicio' | 'fim' | null>(null);
 
-  const [aluno, setAluno] = useState('');
+  const [aluno, setAluno] = useState(''); // usado só no modo mock
   const [grupo, setGrupo] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+
+  // Seleção de alunos (API)
+  const [alunosDisponiveis, setAlunosDisponiveis] = useState<AlunoListaItem[]>([]);
+  const [selecionados, setSelecionados] = useState<number[]>([]);
+  const [busca, setBusca] = useState('');
+  const [carregandoAlunos, setCarregandoAlunos] = useState(!USAR_MOCK);
+  const [erroAlunos, setErroAlunos] = useState('');
+
+  useEffect(() => {
+    if (USAR_MOCK) return;
+    let ativo = true;
+    (async () => {
+      try {
+        const todos: AlunoListaItem[] = [];
+        let pagina = 1;
+        // Junta todas as páginas para poder filtrar na própria tela.
+        while (true) {
+          const dados = await listarAlunos({ pagina });
+          todos.push(...dados.itens);
+          if (dados.itens.length === 0 || todos.length >= dados.total || pagina >= 50) break;
+          pagina += 1;
+        }
+        if (ativo) setAlunosDisponiveis(todos);
+      } catch (e) {
+        if (ativo) setErroAlunos(mensagemDeErroAlunos(e));
+      } finally {
+        if (ativo) setCarregandoAlunos(false);
+      }
+    })();
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  const alternarAluno = (id: number) =>
+    setSelecionados((atual) => (atual.includes(id) ? atual.filter((x) => x !== id) : [...atual, id]));
+
+  const termo = normalizar(busca.trim());
+  const filtrados = alunosDisponiveis.filter(
+    (a) => !termo || normalizar(a.nome_completo).includes(termo) || normalizar(a.email).includes(termo),
+  );
+  const opcoes = filtrados.slice(0, LIMITE_OPCOES);
+  const alunosSelecionados = alunosDisponiveis.filter((a) => selecionados.includes(a.id));
 
   const handleSalvar = async () => {
     if (salvando) return;
@@ -83,7 +135,7 @@ export default function CriarAulaScreen() {
     const horaFimTexto = formatarHora(horaFimObj);
 
     const dataChave = dataBRparaChave(dataTexto);
-    const alunoIds = lerIds(aluno);
+    const alunoIds = USAR_MOCK ? lerIds(aluno) : selecionados;
     const grupoIds = lerIds(grupo);
     const nomes = aluno.split(',').map((s) => s.trim()).filter(Boolean);
 
@@ -94,7 +146,7 @@ export default function CriarAulaScreen() {
     if (USAR_MOCK) {
       if (nomes.length === 0) return setErro('Informe ao menos um aluno.');
     } else if (alunoIds.length === 0 && grupoIds.length === 0) {
-      return setErro('Informe ao menos um aluno ou grupo (IDs separados por vírgula).');
+      return setErro('Selecione ao menos um aluno ou informe um grupo (IDs separados por vírgula).');
     }
 
     setErro(null);
@@ -137,7 +189,11 @@ export default function CriarAulaScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <ScrollView contentContainerStyle={styles.conteudo} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.conteudo}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.cardForm}>
           <Text style={styles.cardHeaderTitle}>Informações de Aula</Text>
 
@@ -293,13 +349,77 @@ export default function CriarAulaScreen() {
           {/* Alunos */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Selecionar Alunos</Text>
-            <TextInput
-              style={styles.input}
-              placeholder={USAR_MOCK ? 'Nome do aluno (ex.: José)' : 'IDs dos alunos (ex.: 1,2)'}
-              placeholderTextColor="#9CA3AF"
-              value={aluno}
-              onChangeText={setAluno}
-            />
+
+            {USAR_MOCK ? (
+              <TextInput
+                style={styles.input}
+                placeholder="Nome do aluno (ex.: José)"
+                placeholderTextColor="#9CA3AF"
+                value={aluno}
+                onChangeText={setAluno}
+              />
+            ) : (
+              <>
+                {alunosSelecionados.length > 0 && (
+                  <View style={styles.chipsRow}>
+                    {alunosSelecionados.map((a) => (
+                      <Pressable
+                        key={a.id}
+                        style={({ pressed }) => [styles.chip, pressed && styles.pressionado]}
+                        onPress={() => alternarAluno(a.id)}
+                      >
+                        <Text style={styles.chipTexto}>{a.nome_completo}</Text>
+                        <Ionicons name="close" size={14} color={palette.header} />
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+
+                <TextInput
+                  style={styles.input}
+                  placeholder="Pesquisar aluno por nome ou e-mail..."
+                  placeholderTextColor="#9CA3AF"
+                  value={busca}
+                  onChangeText={setBusca}
+                />
+
+                <View style={styles.listaAlunos}>
+                  {carregandoAlunos ? (
+                    <ActivityIndicator color={palette.header} style={{ margin: 12 }} />
+                  ) : erroAlunos ? (
+                    <Text style={styles.estadoAlunos}>{erroAlunos}</Text>
+                  ) : opcoes.length === 0 ? (
+                    <Text style={styles.estadoAlunos}>Nenhum aluno encontrado.</Text>
+                  ) : (
+                    opcoes.map((a) => {
+                      const marcado = selecionados.includes(a.id);
+                      return (
+                        <Pressable
+                          key={a.id}
+                          style={({ pressed }) => [styles.alunoOpcao, pressed && styles.pressionado]}
+                          onPress={() => alternarAluno(a.id)}
+                        >
+                          <Ionicons
+                            name={marcado ? 'checkbox' : 'square-outline'}
+                            size={20}
+                            color={marcado ? palette.header : palette.textMuted}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.alunoNome}>{a.nome_completo}</Text>
+                            <Text style={styles.alunoEmail}>{a.email}</Text>
+                          </View>
+                        </Pressable>
+                      );
+                    })
+                  )}
+                  {!carregandoAlunos && !erroAlunos && filtrados.length > LIMITE_OPCOES && (
+                    <Text style={styles.estadoAlunos}>
+                      Mostrando {LIMITE_OPCOES} de {filtrados.length}. Refine a busca.
+                    </Text>
+                  )}
+                </View>
+              </>
+            )}
           </View>
 
           {/* Grupo */}
@@ -412,7 +532,38 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
-  
+
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F3E5F5',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  chipTexto: { fontSize: 12, fontWeight: '600', color: palette.header },
+  listaAlunos: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: palette.line,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  alunoOpcao: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: palette.line,
+  },
+  alunoNome: { fontSize: 13, fontWeight: '600', color: palette.title },
+  alunoEmail: { fontSize: 11, color: palette.textMuted },
+  estadoAlunos: { fontSize: 12, color: palette.textMuted, textAlign: 'center', padding: 12 },
+
   erro: { color: '#C62828', fontSize: 12, fontWeight: '600' },
   acoesRow: { flexDirection: 'row', gap: 12, marginTop: 10 },
   btnAcao: {
