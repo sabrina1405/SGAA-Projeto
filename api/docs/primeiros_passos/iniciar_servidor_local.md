@@ -30,8 +30,6 @@ Com o servidor rodando, você pode acessar a documentação gerada automaticamen
 - **Swagger UI:** `http://localhost:8000/docs`
 - **ReDoc:** `http://localhost:8000/redoc`
 
-Com `AMBIENTE=prod`, essas rotas e o `/openapi.json` respondem `404`.
-
 ---
 
 ## Executar para Testes em Dispositivos Móveis / Rede Local
